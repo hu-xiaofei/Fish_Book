@@ -1,2 +1,14 @@
 .superpowers/
 .worktrees/
+.DS_Store
+.idea/
+.vscode/
+.env
+.env.*
+!.env.example
+frontend/node_modules/
+frontend/dist/
+frontend/playwright-report/
+frontend/test-results/
+backend/target/
+*.log
