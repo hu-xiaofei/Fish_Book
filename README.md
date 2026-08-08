@@ -12,7 +12,7 @@
 cp .env.example .env
 docker compose up -d
 cd backend && ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
-cd frontend && npm ci && npm run dev
+cd ../frontend && npm ci && npm run dev
 ```
 
 `.env` contains local-only values and must never be committed.
