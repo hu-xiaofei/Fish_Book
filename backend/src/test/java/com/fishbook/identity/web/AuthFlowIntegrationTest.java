@@ -1,7 +1,6 @@
 package com.fishbook.identity.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -19,10 +18,19 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockCookie;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.session.Session;
+import org.springframework.session.SessionRepository;
+import org.springframework.session.web.http.CookieSerializer;
+import org.springframework.session.web.http.CookieSerializer.CookieValue;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
@@ -39,6 +47,12 @@ class AuthFlowIntegrationTest {
     @Autowired
     JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    SessionRepository<? extends Session> sessionRepository;
+
+    @Autowired
+    CookieSerializer cookieSerializer;
+
     @BeforeEach
     void clearIdentityAndSessionData() {
         jdbcTemplate.update("DELETE FROM SPRING_SESSION_ATTRIBUTES");
@@ -51,9 +65,11 @@ class AuthFlowIntegrationTest {
         String body = """
                 {"email":"Angler@Example.COM","password":"strong-pass","nickname":"Wall_E"}
                 """;
+        Cookie csrfCookie = fetchCsrfCookie();
 
         mvc.perform(post("/api/v1/auth/register")
-                        .with(csrf())
+                        .cookie(csrfCookie)
+                        .header("X-XSRF-TOKEN", csrfCookie.getValue())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
@@ -62,7 +78,8 @@ class AuthFlowIntegrationTest {
                 .andExpect(jsonPath("$.password").doesNotExist());
 
         mvc.perform(post("/api/v1/auth/register")
-                        .with(csrf())
+                        .cookie(csrfCookie)
+                        .header("X-XSRF-TOKEN", csrfCookie.getValue())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isConflict())
@@ -70,11 +87,60 @@ class AuthFlowIntegrationTest {
     }
 
     @Test
-    void loginProfileRenameAndLogoutUseServerSessionAndCsrf() throws Exception {
-        register("angler@example.com", "strong-pass", "Wall_E");
+    void acceptsRawCsrfCookieValueReplayedBySpaHeader() throws Exception {
+        Cookie csrfCookie = fetchCsrfCookie();
+
+        mvc.perform(post("/api/v1/auth/register")
+                        .cookie(csrfCookie)
+                        .header("X-XSRF-TOKEN", csrfCookie.getValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"angler@example.com","password":"strong-pass","nickname":"Wall_E"}
+                                """))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void successfulLoginExpiresPreLoginCsrfTokenAndIssuesFreshTokenOnBootstrap()
+            throws Exception {
+        Cookie preLoginCsrf = fetchCsrfCookie();
+
+        mvc.perform(post("/api/v1/auth/register")
+                        .cookie(preLoginCsrf)
+                        .header("X-XSRF-TOKEN", preLoginCsrf.getValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"angler@example.com","password":"strong-pass","nickname":"Wall_E"}
+                                """))
+                .andExpect(status().isCreated());
 
         MvcResult login = mvc.perform(post("/api/v1/auth/login")
-                        .with(csrf())
+                        .cookie(preLoginCsrf)
+                        .header("X-XSRF-TOKEN", preLoginCsrf.getValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"angler@example.com\",\"password\":\"strong-pass\"}"))
+                .andExpect(status().isOk())
+                .andExpect(cookie().maxAge("XSRF-TOKEN", 0))
+                .andExpect(cookie().exists("JSESSIONID"))
+                .andReturn();
+        assertThat(login.getResponse().getHeaders(HttpHeaders.SET_COOKIE))
+                .filteredOn(value -> value.startsWith("XSRF-TOKEN="))
+                .hasSize(1);
+        Cookie sessionCookie = login.getResponse().getCookie("JSESSIONID");
+        assertThat(sessionCookie).isNotNull();
+
+        Cookie freshCsrf = fetchCsrfCookie(sessionCookie);
+        assertThat(freshCsrf.getValue()).isNotEqualTo(preLoginCsrf.getValue());
+    }
+
+    @Test
+    void loginProfileRenameAndLogoutUseServerSessionAndCsrf() throws Exception {
+        register("angler@example.com", "strong-pass", "Wall_E");
+        Cookie loginCsrf = fetchCsrfCookie();
+
+        MvcResult login = mvc.perform(post("/api/v1/auth/login")
+                        .cookie(loginCsrf)
+                        .header("X-XSRF-TOKEN", loginCsrf.getValue())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"angler@example.com\",\"password\":\"strong-pass\"}"))
                 .andExpect(status().isOk())
@@ -113,15 +179,18 @@ class AuthFlowIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CSRF_INVALID"));
 
+        Cookie authenticatedCsrf = fetchCsrfCookie(sessionCookie);
         mvc.perform(patch("/api/v1/me")
-                        .cookie(sessionCookie)
-                        .with(csrf())
+                        .cookie(sessionCookie, authenticatedCsrf)
+                        .header("X-XSRF-TOKEN", authenticatedCsrf.getValue())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nickname\":\"River\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nickname").value("River"));
 
-        mvc.perform(post("/api/v1/auth/logout").cookie(sessionCookie).with(csrf()))
+        mvc.perform(post("/api/v1/auth/logout")
+                        .cookie(sessionCookie, authenticatedCsrf)
+                        .header("X-XSRF-TOKEN", authenticatedCsrf.getValue()))
                 .andExpect(status().isNoContent())
                 .andExpect(cookie().maxAge("JSESSIONID", 0));
 
@@ -133,16 +202,14 @@ class AuthFlowIntegrationTest {
     @Test
     void loginRotatesAnExistingSessionId() throws Exception {
         register("angler@example.com", "strong-pass", "Wall_E");
-        MvcResult unauthenticatedRequest = mvc.perform(get("/api/v1/me"))
-                .andExpect(status().isUnauthorized())
-                .andReturn();
-        Cookie existingSessionCookie =
-                unauthenticatedRequest.getResponse().getCookie("JSESSIONID");
-        assertThat(existingSessionCookie).isNotNull();
+        Cookie existingSessionCookie = createPersistedSessionCookie();
+        Cookie loginCsrf = fetchCsrfCookie(existingSessionCookie);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM SPRING_SESSION", Integer.class)).isEqualTo(1);
 
         MvcResult login = mvc.perform(post("/api/v1/auth/login")
-                        .cookie(existingSessionCookie)
-                        .with(csrf())
+                        .cookie(existingSessionCookie, loginCsrf)
+                        .header("X-XSRF-TOKEN", loginCsrf.getValue())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"angler@example.com\",\"password\":\"strong-pass\"}"))
                 .andExpect(status().isOk())
@@ -152,14 +219,18 @@ class AuthFlowIntegrationTest {
         Cookie authenticatedSessionCookie = login.getResponse().getCookie("JSESSIONID");
         assertThat(authenticatedSessionCookie.getValue())
                 .isNotEqualTo(existingSessionCookie.getValue());
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM SPRING_SESSION", Integer.class)).isEqualTo(1);
     }
 
     @Test
     void invalidCredentialsReturn401AndStableCode() throws Exception {
         register("angler@example.com", "strong-pass", "Wall_E");
+        Cookie csrfCookie = fetchCsrfCookie();
 
         mvc.perform(post("/api/v1/auth/login")
-                        .with(csrf())
+                        .cookie(csrfCookie)
+                        .header("X-XSRF-TOKEN", csrfCookie.getValue())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"angler@example.com\",\"password\":\"wrong-pass\"}"))
                 .andExpect(status().isUnauthorized())
@@ -170,8 +241,10 @@ class AuthFlowIntegrationTest {
 
     @Test
     void invalidRegistrationReturnsFieldErrorsWithoutCreatingAUser() throws Exception {
+        Cookie csrfCookie = fetchCsrfCookie();
         mvc.perform(post("/api/v1/auth/register")
-                        .with(csrf())
+                        .cookie(csrfCookie)
+                        .header("X-XSRF-TOKEN", csrfCookie.getValue())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"not-an-email\",\"password\":\"short\",\"nickname\":\"\"}"))
                 .andExpect(status().isBadRequest())
@@ -185,10 +258,48 @@ class AuthFlowIntegrationTest {
     private void register(String email, String password, String nickname) throws Exception {
         String body = objectMapper.writeValueAsString(
                 new RegisterRequest(email, password, nickname));
+        Cookie csrfCookie = fetchCsrfCookie();
         mvc.perform(post("/api/v1/auth/register")
-                        .with(csrf())
+                        .cookie(csrfCookie)
+                        .header("X-XSRF-TOKEN", csrfCookie.getValue())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
+    }
+
+    private Cookie fetchCsrfCookie(Cookie... requestCookies) throws Exception {
+        MockHttpServletRequestBuilder request = get("/api/v1/auth/csrf");
+        if (requestCookies.length > 0) {
+            request.cookie(requestCookies);
+        }
+        MvcResult csrf = mvc.perform(request)
+                .andExpect(status().isOk())
+                .andExpect(cookie().exists("XSRF-TOKEN"))
+                .andExpect(jsonPath("$.headerName").value("X-XSRF-TOKEN"))
+                .andReturn();
+        Cookie csrfCookie = csrf.getResponse().getCookie("XSRF-TOKEN");
+        assertThat(csrfCookie).isNotNull();
+        return csrfCookie;
+    }
+
+    private Cookie createPersistedSessionCookie() {
+        Session session = createAndSaveSession(sessionRepository);
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setSecure(true);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        cookieSerializer.writeCookieValue(new CookieValue(request, response, session.getId()));
+
+        String setCookie = response.getHeader(HttpHeaders.SET_COOKIE);
+        assertThat(setCookie).isNotNull();
+        MockCookie cookie = MockCookie.parse(setCookie);
+        assertThat(cookie.getName()).isEqualTo("JSESSIONID");
+        return cookie;
+    }
+
+    private static <S extends Session> S createAndSaveSession(SessionRepository<S> repository) {
+        S session = repository.createSession();
+        repository.save(session);
+        return session;
     }
 }

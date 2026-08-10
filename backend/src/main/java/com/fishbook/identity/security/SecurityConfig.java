@@ -23,8 +23,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
+import org.springframework.security.web.authentication.session.CompositeSessionAuthenticationStrategy;
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.csrf.CsrfAuthenticationStrategy;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
@@ -75,8 +77,11 @@ public class SecurityConfig {
     }
 
     @Bean
-    SessionAuthenticationStrategy sessionAuthenticationStrategy() {
-        return new ChangeSessionIdAuthenticationStrategy();
+    SessionAuthenticationStrategy loginSessionAuthenticationStrategy(
+            CookieCsrfTokenRepository csrfTokenRepository) {
+        return new CompositeSessionAuthenticationStrategy(List.of(
+                new ChangeSessionIdAuthenticationStrategy(),
+                new CsrfAuthenticationStrategy(csrfTokenRepository)));
     }
 
     @Bean
@@ -85,10 +90,15 @@ public class SecurityConfig {
     }
 
     @Bean
+    CookieCsrfTokenRepository csrfTokenRepository() {
+        return CookieCsrfTokenRepository.withHttpOnlyFalse();
+    }
+
+    @Bean
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            SessionAuthenticationStrategy sessionAuthenticationStrategy,
             HttpSessionSecurityContextRepository securityContextRepository,
+            CookieCsrfTokenRepository csrfTokenRepository,
             ObjectMapper objectMapper) throws Exception {
         RequestMatcher authenticationRequiredEndpoints = new OrRequestMatcher(
                 PathPatternRequestMatcher.pathPattern("/api/v1/me/**"),
@@ -124,13 +134,15 @@ public class SecurityConfig {
                         .requestMatchers(authenticationRequiredEndpoints)
                         .authenticated()
                         .anyRequest().denyAll())
-                .csrf(csrf -> csrf.csrfTokenRepository(
-                        CookieCsrfTokenRepository.withHttpOnlyFalse()))
+                .csrf(csrf -> csrf
+                        .spa()
+                        .csrfTokenRepository(csrfTokenRepository))
                 .securityContext(securityContext -> securityContext
                         .securityContextRepository(securityContextRepository)
                         .requireExplicitSave(true))
+                .requestCache(requestCache -> requestCache.disable())
                 .sessionManagement(session -> session
-                        .sessionAuthenticationStrategy(sessionAuthenticationStrategy))
+                        .sessionFixation(fixation -> fixation.changeSessionId()))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, exception) -> {
                             if (authenticationRequiredEndpoints.matches(request)) {
