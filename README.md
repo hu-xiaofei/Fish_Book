@@ -49,3 +49,9 @@ Copy `.env.example` to `.env` for local development. Keep `.env` local-only and 
 ## Troubleshooting
 
 Verify the required tool versions, then restart Docker Desktop if Docker commands are unavailable.
+
+`docker compose down` stops the local dependencies while preserving their data. To permanently delete the local MySQL and MinIO volumes, run the destructive command below:
+
+```bash
+docker compose down -v
+```
