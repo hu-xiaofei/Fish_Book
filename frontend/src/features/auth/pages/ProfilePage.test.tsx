@@ -169,4 +169,3 @@ test('ordinary profile errors do not expose backend details', async () => {
   expect(status).toHaveTextContent('保存失败，请稍后重试');
   expect(status).not.toHaveTextContent('SQL constraint');
 });
-

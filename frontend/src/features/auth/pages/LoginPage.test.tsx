@@ -106,4 +106,3 @@ test('ordinary login errors do not expose backend details', async () => {
   expect(status).not.toHaveTextContent('SQL users');
   expect(screen.queryByText(/db\.internal/)).not.toBeInTheDocument();
 });
-
