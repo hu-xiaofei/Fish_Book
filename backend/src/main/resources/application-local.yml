@@ -5,3 +5,9 @@ spring:
     password: ${MYSQL_PASSWORD:fishbook_local_only}
   flyway:
     enabled: true
+
+server:
+  servlet:
+    session:
+      cookie:
+        secure: false

@@ -9,6 +9,16 @@ spring:
     jdbc:
       initialize-schema: never
 
+server:
+  servlet:
+    session:
+      timeout: 24h
+      cookie:
+        name: JSESSIONID
+        http-only: true
+        same-site: lax
+        secure: true
+
 management:
   endpoints:
     web:
