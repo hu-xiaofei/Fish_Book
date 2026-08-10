@@ -1,0 +1,7 @@
+package com.fishbook.identity.domain;
+
+public interface PasswordHasher {
+    String hash(String rawPassword);
+
+    boolean matches(String rawPassword, String encodedPassword);
+}
