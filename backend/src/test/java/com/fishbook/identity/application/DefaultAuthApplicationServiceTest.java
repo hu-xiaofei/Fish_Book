@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DefaultAuthApplicationServiceTest {
@@ -60,7 +61,8 @@ class DefaultAuthApplicationServiceTest {
 
         assertThatThrownBy(() -> service.register(
                 new RegisterUserCommand("ANGLER@example.com", "strong-pass", "Wall_E")))
-                .isInstanceOf(DuplicateEmailException.class);
+                .isInstanceOfSatisfying(DuplicateEmailException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("DUPLICATE_EMAIL"));
         assertThat(repository.saveCount()).isZero();
         assertThat(passwordHasher.hashCount()).isZero();
     }
@@ -70,14 +72,16 @@ class DefaultAuthApplicationServiceTest {
     void rejectsBlankEmail(String email) {
         assertThatThrownBy(() -> service.register(
                 new RegisterUserCommand(email, "strong-pass", "Wall_E")))
-                .isInstanceOf(InvalidEmailException.class);
+                .isInstanceOfSatisfying(InvalidEmailException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("INVALID_EMAIL"));
     }
 
     @Test
     void rejectsNullEmail() {
         assertThatThrownBy(() -> service.register(
                 new RegisterUserCommand(null, "strong-pass", "Wall_E")))
-                .isInstanceOf(InvalidEmailException.class);
+                .isInstanceOfSatisfying(InvalidEmailException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("INVALID_EMAIL"));
     }
 
     @Test
@@ -97,7 +101,21 @@ class DefaultAuthApplicationServiceTest {
     void rejectsPasswordOutsideTenToOneHundredTwentyEightCharacters(String password) {
         assertThatThrownBy(() -> service.register(
                 new RegisterUserCommand("angler@example.com", password, "Wall_E")))
-                .isInstanceOf(InvalidPasswordException.class);
+                .isInstanceOfSatisfying(InvalidPasswordException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("INVALID_PASSWORD"));
+    }
+
+    @Test
+    void acceptsPasswordsAtTenAndOneHundredTwentyEightCharacterBoundaries() {
+        assertThatCode(() -> service.register(
+                new RegisterUserCommand("ten@example.com", "a".repeat(10), "Ten")))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> service.register(
+                new RegisterUserCommand("max@example.com", "a".repeat(128), "Max")))
+                .doesNotThrowAnyException();
+
+        assertThat(passwordHasher.hashCount()).isEqualTo(2);
+        assertThat(repository.saveCount()).isEqualTo(2);
     }
 
     @ParameterizedTest
@@ -105,7 +123,8 @@ class DefaultAuthApplicationServiceTest {
     void rejectsBlankNickname(String nickname) {
         assertThatThrownBy(() -> service.register(
                 new RegisterUserCommand("angler@example.com", "strong-pass", nickname)))
-                .isInstanceOf(InvalidNicknameException.class);
+                .isInstanceOfSatisfying(InvalidNicknameException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("INVALID_NICKNAME"));
     }
 
     @Test

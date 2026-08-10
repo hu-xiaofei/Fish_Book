@@ -2,13 +2,11 @@ package com.fishbook.identity.persistence;
 
 import com.fishbook.identity.domain.User;
 import com.fishbook.identity.domain.UserRepository;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
 @Repository
-@Lazy
 public class JpaUserRepositoryAdapter implements UserRepository {
 
     private final SpringDataUserJpaRepository repository;

@@ -8,7 +8,6 @@ import com.fishbook.identity.domain.PasswordHasher;
 import com.fishbook.identity.domain.User;
 import com.fishbook.identity.domain.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -29,7 +28,7 @@ public final class DefaultAuthApplicationService implements AuthApplicationServi
 
     @Autowired
     public DefaultAuthApplicationService(
-            @Lazy UserRepository userRepository,
+            UserRepository userRepository,
             PasswordHasher passwordHasher) {
         this(userRepository, passwordHasher, Clock.systemUTC());
     }
