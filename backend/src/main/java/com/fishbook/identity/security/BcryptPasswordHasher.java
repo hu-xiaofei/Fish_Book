@@ -5,6 +5,10 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -41,10 +45,25 @@ public final class BcryptPasswordHasher implements PasswordHasher {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             digest.update(PREHASH_DOMAIN);
-            byte[] hashed = digest.digest(rawPassword.getBytes(StandardCharsets.UTF_8));
+            byte[] hashed = digest.digest(encodeUtf8Strictly(rawPassword));
             return Base64.getEncoder().withoutPadding().encodeToString(hashed);
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
+    }
+
+    private static byte[] encodeUtf8Strictly(String rawPassword) {
+        try {
+            ByteBuffer encoded = StandardCharsets.UTF_8.newEncoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .encode(CharBuffer.wrap(rawPassword));
+            byte[] bytes = new byte[encoded.remaining()];
+            encoded.get(bytes);
+            return bytes;
+        } catch (CharacterCodingException exception) {
+            throw new IllegalArgumentException(
+                    "Password cannot be encoded as UTF-8", exception);
         }
     }
 }

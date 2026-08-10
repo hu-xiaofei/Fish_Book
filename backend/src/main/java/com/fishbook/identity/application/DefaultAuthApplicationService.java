@@ -79,9 +79,26 @@ public final class DefaultAuthApplicationService implements AuthApplicationServi
     private static void validatePassword(String password) {
         if (password == null
                 || password.length() < MIN_PASSWORD_LENGTH
-                || password.length() > MAX_PASSWORD_LENGTH) {
+                || password.length() > MAX_PASSWORD_LENGTH
+                || containsUnpairedSurrogate(password)) {
             throw new InvalidPasswordException();
         }
+    }
+
+    private static boolean containsUnpairedSurrogate(String value) {
+        for (int index = 0; index < value.length(); index++) {
+            char current = value.charAt(index);
+            if (Character.isHighSurrogate(current)) {
+                if (index + 1 >= value.length()
+                        || !Character.isLowSurrogate(value.charAt(index + 1))) {
+                    return true;
+                }
+                index++;
+            } else if (Character.isLowSurrogate(current)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void validateNickname(String nickname) {

@@ -1,8 +1,14 @@
 package com.fishbook.identity.security;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.nio.charset.CharacterCodingException;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class BcryptPasswordHasherTest {
 
@@ -21,8 +27,10 @@ class BcryptPasswordHasherTest {
     }
 
     @Test
-    void hashesAndMatchesOneHundredTwentyEightMultibyteCharacters() {
-        String password = "鱼".repeat(128);
+    void hashesAndMatchesOneHundredTwentyEightCodeUnitsIncludingSurrogatePair() {
+        String password = "鱼".repeat(126) + "🐟";
+
+        assertThat(password).hasSize(128);
 
         String encoded = hasher.hash(password);
 
@@ -42,5 +50,27 @@ class BcryptPasswordHasherTest {
         assertThat(hasher.matches(second, secondHash)).isTrue();
         assertThat(hasher.matches(first, secondHash)).isFalse();
         assertThat(hasher.matches(second, firstHash)).isFalse();
+    }
+
+    @ParameterizedTest
+    @MethodSource("malformedPasswords")
+    void rejectsMalformedUtf16InsteadOfReplacingIt(String password) {
+        String validHash = hasher.hash("strong-pass");
+
+        assertThatThrownBy(() -> hasher.hash(password))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Password cannot be encoded as UTF-8")
+                .hasCauseInstanceOf(CharacterCodingException.class);
+        assertThatThrownBy(() -> hasher.matches(password, validHash))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Password cannot be encoded as UTF-8")
+                .hasCauseInstanceOf(CharacterCodingException.class);
+    }
+
+    private static Stream<String> malformedPasswords() {
+        return Stream.of(
+                "a".repeat(9) + "\uD800",
+                "a".repeat(9) + "\uD801",
+                "a".repeat(9) + "\uDC00");
     }
 }

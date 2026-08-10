@@ -10,6 +10,7 @@ import com.fishbook.identity.domain.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Clock;
@@ -18,6 +19,7 @@ import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -119,6 +121,17 @@ class DefaultAuthApplicationServiceTest {
     }
 
     @ParameterizedTest
+    @MethodSource("malformedPasswords")
+    void rejectsPasswordsContainingUnpairedSurrogates(String password) {
+        assertThatThrownBy(() -> service.register(
+                new RegisterUserCommand("angler@example.com", password, "Wall_E")))
+                .isInstanceOfSatisfying(InvalidPasswordException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("INVALID_PASSWORD"));
+        assertThat(passwordHasher.hashCount()).isZero();
+        assertThat(repository.saveCount()).isZero();
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"", "                                                   "})
     void rejectsBlankNickname(String nickname) {
         assertThatThrownBy(() -> service.register(
@@ -133,6 +146,13 @@ class DefaultAuthApplicationServiceTest {
         assertThatThrownBy(() -> service.register(
                 new RegisterUserCommand("angler@example.com", "strong-pass", nickname)))
                 .isInstanceOf(InvalidNicknameException.class);
+    }
+
+    private static Stream<String> malformedPasswords() {
+        return Stream.of(
+                "a".repeat(9) + "\uD800",
+                "a".repeat(9) + "\uD801",
+                "a".repeat(9) + "\uDC00");
     }
 
     private static final class FakeUserRepository implements UserRepository {
