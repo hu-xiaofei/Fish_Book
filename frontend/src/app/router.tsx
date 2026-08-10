@@ -1,4 +1,7 @@
 import { createBrowserRouter } from 'react-router-dom';
+import { ProtectedRoute } from '../features/auth/components/ProtectedRoute';
+import { LoginPage } from '../features/auth/pages/LoginPage';
+import { ProfilePage } from '../features/auth/pages/ProfilePage';
 import { RegisterPage } from '../features/auth/pages/RegisterPage';
 import { App } from './App';
 
@@ -13,10 +16,14 @@ export const router = createBrowserRouter([
   },
   {
     path: '/login',
-    element: <h1>登录</h1>,
+    element: <LoginPage />,
   },
   {
     path: '/profile',
-    element: <h1>个人资料</h1>,
+    element: (
+      <ProtectedRoute>
+        <ProfilePage />
+      </ProtectedRoute>
+    ),
   },
 ]);
