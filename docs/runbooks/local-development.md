@@ -77,7 +77,7 @@ docker compose -f compose.yaml -f compose.full.yaml logs --tail=300 backend mysq
 Open the MySQL client using the username, password, and database from `.env`:
 
 ```bash
-docker compose -f compose.yaml -f compose.full.yaml exec mysql mysql -u fishbook -p fishbook
+docker compose -f compose.yaml -f compose.full.yaml exec mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --user="$MYSQL_USER" "$MYSQL_DATABASE"'
 ```
 
 At the MySQL prompt, inspect migration history:
@@ -130,7 +130,7 @@ Use it only when disposable local data is understood and intentionally being dis
 Copy `.env.example` once if `.env` is absent, start the complete stack without deleting its volumes, and run every layer in this order:
 
 ```bash
-cp .env.example .env
+test -f .env || cp .env.example .env
 docker compose -f compose.yaml -f compose.full.yaml up -d --build
 
 cd backend && ./mvnw test
