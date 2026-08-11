@@ -1101,6 +1101,7 @@ git commit -m "feat: seed audited freshwater fish catalog"
 ### Task 5: Public Catalog API, Error Contract, and Security Boundary
 
 **Files:**
+- Create: `backend/src/main/resources/db/migration/V5__add_channa_argus_lake_habitat.sql`
 - Create: `backend/src/main/java/com/fishbook/catalog/web/FishCatalogController.java`
 - Create: `backend/src/main/java/com/fishbook/catalog/web/dto/FishPageResponse.java`
 - Create: `backend/src/main/java/com/fishbook/catalog/web/dto/FishSummaryResponse.java`
@@ -1120,6 +1121,18 @@ git commit -m "feat: seed audited freshwater fish catalog"
 - [ ] **Step 1: Write real-MySQL MockMvc contract tests**
 
 Use `@SpringBootTest`, `@AutoConfigureMockMvc`, and `@Import(MySqlTestConfiguration.class)`. Do not mock the service or repository. Assert:
+
+Before running the contract tests, preserve the committed V4 migration and add
+an additive V5 correction for the accepted Task 5 filter contract:
+
+```sql
+INSERT INTO fish_habitats (fish_species_id, habitat_code)
+VALUES (7, 'LAKE');
+```
+
+This keeps the existing `RIVER` and `POND` habitats for `channa-argus` while
+adding the lake habitat already described by its curated content. Do not edit
+V4 after it has been committed.
 
 ```java
 mvc.perform(get("/api/v1/fish"))
@@ -1293,6 +1306,7 @@ Then:
 
 ```bash
 git add backend/src/main/java/com/fishbook/catalog/web \
+  backend/src/main/resources/db/migration/V5__add_channa_argus_lake_habitat.sql \
   backend/src/main/java/com/fishbook/common/error/GlobalExceptionHandler.java \
   backend/src/main/java/com/fishbook/identity/security/SecurityConfig.java \
   backend/src/test/java/com/fishbook/catalog/web
