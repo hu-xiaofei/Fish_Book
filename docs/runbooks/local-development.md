@@ -66,6 +66,28 @@ docker compose -f compose.yaml -f compose.full.yaml logs --tail=200 -f mysql
 
 Press `Ctrl-C` to stop following logs; the containers continue running.
 
+## Catalog Smoke Checks
+
+The public catalog is available at [the catalog home page](http://localhost:8080/), the [乌鳢 detail page](http://localhost:8080/fish/channa-argus), and the [catalog attribution record](../data-sources/fish-catalog-attribution.md). After the full stack is healthy, verify its public API and locally served image with:
+
+```bash
+curl -fsS 'http://localhost:8080/api/v1/fish?page=0'
+curl -fsS 'http://localhost:8080/api/v1/fish?q=%E9%BB%91%E9%B1%BC'
+curl -fsS 'http://localhost:8080/api/v1/fish/channa-argus'
+curl -I 'http://localhost:8080/images/fish/channa-argus.jpg'
+```
+
+Each API request should return JSON without a login session. The image response should be `200 OK` with an `image/jpeg` content type. Catalog writes and image uploads are intentionally unavailable; the catalog and its local image assets are read-only.
+
+If a catalog endpoint is unavailable after an image rebuild, check the public health endpoint and backend logs first:
+
+```bash
+curl -fsS http://localhost:8080/actuator/health/readiness
+docker compose -f compose.yaml -f compose.full.yaml logs --tail=300 backend mysql
+```
+
+For a migration failure, use the Flyway diagnosis below and confirm V3 and V4 appear once in `flyway_schema_history` before retrying the smoke checks.
+
 ## Diagnose Flyway Failures
 
 Start with the backend and MySQL logs:

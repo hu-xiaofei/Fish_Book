@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import {
   fetchFishFilterOptions,
@@ -20,6 +21,10 @@ export function FishCatalogPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = parseCatalogSearchParams(searchParams);
+  const latestFilters = useRef(filters);
+  useEffect(() => {
+    latestFilters.current = filters;
+  }, [filters]);
   const fishQuery = useQuery({
     queryKey: fishListQueryKey(filters),
     queryFn: () => fetchFishPage(filters),
@@ -31,12 +36,10 @@ export function FishCatalogPage() {
   const options = filterQuery.data ?? { families: [], habitats: [] };
   const from = `${location.pathname}${location.search}`;
 
-  const updateFilters = (next: CatalogFiltersValue) => {
+  const updateFilters = (update: (current: CatalogFiltersValue) => CatalogFiltersValue) => {
+    const next = update(latestFilters.current);
+    latestFilters.current = next;
     setSearchParams(toCatalogSearchParams(next));
-  };
-
-  const resetPage = (next: Omit<CatalogFiltersValue, 'page'>) => {
-    updateFilters({ ...next, page: 0 });
   };
 
   return (
@@ -58,7 +61,7 @@ export function FishCatalogPage() {
         <CatalogSearchForm
           key={filters.q}
           submittedQuery={filters.q}
-          onSubmit={(q) => resetPage({ ...filters, q })}
+          onSubmit={(q) => updateFilters((current) => ({ ...current, q, page: 0 }))}
         />
         <div className={styles.filterGrid}>
           <CatalogFilters
@@ -66,9 +69,9 @@ export function FishCatalogPage() {
             habitats={options.habitats}
             family={filters.family}
             habitat={filters.habitat}
-            onFamilyChange={(family) => resetPage({ ...filters, family })}
-            onHabitatChange={(habitat: HabitatCode | '') => resetPage({ ...filters, habitat })}
-            onClear={() => updateFilters(emptyFilters)}
+            onFamilyChange={(family) => updateFilters((current) => ({ ...current, family, page: 0 }))}
+            onHabitatChange={(habitat: HabitatCode | '') => updateFilters((current) => ({ ...current, habitat, page: 0 }))}
+            onClear={() => updateFilters(() => emptyFilters)}
           />
         </div>
       </section>
@@ -94,7 +97,7 @@ export function FishCatalogPage() {
             <CatalogPagination
               page={fishQuery.data.page}
               totalPages={fishQuery.data.totalPages}
-              onPageChange={(page) => updateFilters({ ...filters, page })}
+              onPageChange={(page) => updateFilters((current) => ({ ...current, page }))}
             />
           </div>
         </>
