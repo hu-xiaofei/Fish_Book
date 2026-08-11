@@ -1,5 +1,7 @@
 package com.fishbook.common.error;
 
+import com.fishbook.catalog.application.InvalidCatalogQueryException;
+import com.fishbook.catalog.domain.FishNotFoundException;
 import com.fishbook.identity.domain.DuplicateEmailException;
 import com.fishbook.identity.domain.InvalidEmailException;
 import com.fishbook.identity.domain.InvalidNicknameException;
@@ -27,6 +29,30 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(InvalidCatalogQueryException.class)
+    ResponseEntity<ApiErrorResponse> handleInvalidCatalogQuery(
+            InvalidCatalogQueryException exception,
+            HttpServletRequest request) {
+        return error(
+                HttpStatus.BAD_REQUEST,
+                exception.code(),
+                "Catalog query is invalid",
+                List.of(),
+                request);
+    }
+
+    @ExceptionHandler(FishNotFoundException.class)
+    ResponseEntity<ApiErrorResponse> handleFishNotFound(
+            FishNotFoundException exception,
+            HttpServletRequest request) {
+        return error(
+                HttpStatus.NOT_FOUND,
+                exception.code(),
+                "Fish was not found",
+                List.of(),
+                request);
+    }
 
     @ExceptionHandler(DuplicateEmailException.class)
     ResponseEntity<ApiErrorResponse> handleDuplicateEmail(
