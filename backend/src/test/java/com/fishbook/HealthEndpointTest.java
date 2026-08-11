@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fishbook.catalog.domain.FishRepository;
 import com.fishbook.identity.domain.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +20,9 @@ import org.springframework.test.web.servlet.MockMvc;
 class HealthEndpointTest {
     @MockitoBean
     UserRepository userRepository;
+
+    @MockitoBean
+    FishRepository fishRepository;
 
     @Autowired
     MockMvc mvc;
