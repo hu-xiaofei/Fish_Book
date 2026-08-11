@@ -32,7 +32,16 @@ cd frontend && npm ci && npm run dev
 ## Full Stack
 
 ```bash
-docker compose up -d
+cp .env.example .env
+docker compose -f compose.yaml -f compose.full.yaml up -d --build
+```
+
+Open `http://localhost:8080` after the services become healthy. The frontend serves the SPA and proxies `/api` and `/actuator` to the internal backend service.
+
+Stop the full stack without deleting the local MySQL or MinIO data volumes:
+
+```bash
+docker compose -f compose.yaml -f compose.full.yaml down
 ```
 
 ## Tests
@@ -50,8 +59,4 @@ Copy `.env.example` to `.env` for local development. Keep `.env` local-only and 
 
 Verify the required tool versions, then restart Docker Desktop if Docker commands are unavailable.
 
-`docker compose down` stops the local dependencies while preserving their data. To permanently delete the local MySQL and MinIO volumes, run the destructive command below:
-
-```bash
-docker compose down -v
-```
+`docker compose down` stops the local dependencies while preserving their data volumes.

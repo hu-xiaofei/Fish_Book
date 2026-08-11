@@ -52,6 +52,13 @@ class IdentityAuthorizationTest {
     }
 
     @Test
+    void readinessIsPublic() throws Exception {
+        mvc.perform(get("/actuator/health/readiness"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    @Test
     void csrfEndpointReturnsTokenAndHeaderName() throws Exception {
         mvc.perform(get("/api/v1/auth/csrf"))
                 .andExpect(status().isOk())
@@ -60,8 +67,15 @@ class IdentityAuthorizationTest {
     }
 
     @Test
-    void unlistedEndpointIsDenied() throws Exception {
+    void infoEndpointIsDenied() throws Exception {
         mvc.perform(get("/actuator/info"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void unlistedHealthProbeIsDenied() throws Exception {
+        mvc.perform(get("/actuator/health/liveness"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
