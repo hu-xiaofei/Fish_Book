@@ -1,6 +1,8 @@
 package com.fishbook.catalog.domain;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -52,7 +54,8 @@ public record FishSpecies(
         if (aliases.stream().distinct().count() != aliases.size()) {
             throw new IllegalArgumentException("aliases must be unique");
         }
-        habitats = Set.copyOf(Objects.requireNonNull(habitats, "habitats must not be null"));
+        habitats = Collections.unmodifiableSet(new LinkedHashSet<>(
+                Objects.requireNonNull(habitats, "habitats must not be null")));
         if (habitats.isEmpty()) {
             throw new IllegalArgumentException("habitats must not be empty");
         }

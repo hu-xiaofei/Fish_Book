@@ -13,6 +13,8 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
@@ -75,6 +77,30 @@ class JpaFishRepositoryAdapterTest {
         assertThat(adapter.findBySlug("channa-argus")).get()
                 .extracting(FishSpecies::aliases)
                 .asList().contains("黑鱼");
+    }
+
+    @Test
+    void reconstructsHabitatsInEnumDeclarationOrderRegardlessOfInsertionOrder() {
+        jdbcTemplate.update("DELETE FROM fish_habitats WHERE fish_species_id = 1");
+        for (HabitatType habitat : List.of(
+                HabitatType.STREAM,
+                HabitatType.POND,
+                HabitatType.RESERVOIR,
+                HabitatType.LAKE,
+                HabitatType.RIVER)) {
+            jdbcTemplate.update(
+                    "INSERT INTO fish_habitats (fish_species_id, habitat_code) VALUES (?, ?)",
+                    1L, habitat.name());
+        }
+        entityManager.clear();
+
+        assertThat(adapter.findBySlug("cyprinus-carpio").orElseThrow().habitats())
+                .containsExactly(
+                        HabitatType.RIVER,
+                        HabitatType.LAKE,
+                        HabitatType.RESERVOIR,
+                        HabitatType.POND,
+                        HabitatType.STREAM);
     }
 
     @Test
