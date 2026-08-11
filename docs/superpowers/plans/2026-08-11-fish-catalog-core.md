@@ -704,8 +704,9 @@ void blankSearchAndFamilyBecomeAbsent() {
 @ValueSource(strings = {"-1", "not-a-number"})
 void rejectsInvalidPage(String page) {
     assertThatThrownBy(() -> FishCatalogQuery.from(null, null, null, page, null))
-            .isInstanceOf(InvalidCatalogQueryException.class)
-            .extracting("code").isEqualTo("INVALID_CATALOG_QUERY");
+            .isInstanceOfSatisfying(InvalidCatalogQueryException.class,
+                    exception -> assertThat(exception.code())
+                            .isEqualTo("INVALID_CATALOG_QUERY"));
 }
 
 @Test
@@ -717,10 +718,15 @@ void rejectsExplicitSizeEvenWhenItIsTwelve() {
 @Test
 void missingSlugUsesStableErrorCode() {
     assertThatThrownBy(() -> service.getBySlug("missing-fish"))
-            .isInstanceOf(FishNotFoundException.class)
-            .extracting("code").isEqualTo("FISH_NOT_FOUND");
+            .isInstanceOfSatisfying(FishNotFoundException.class,
+                    exception -> assertThat(exception.code())
+                            .isEqualTo("FISH_NOT_FOUND"));
 }
 ```
+
+When a test fixture expects habitat iteration in enum declaration order, build
+the fixture with `EnumSet` rather than `Set.of`; `Set.of` does not define an
+iteration-order contract.
 
 Add these exact service assertions:
 
