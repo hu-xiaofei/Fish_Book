@@ -9,7 +9,7 @@ git clone https://github.com/hu-xiaofei/Fish_Book.git
 cd Fish_Book
 nvm install 24.18.0
 nvm use 24.18.0
-cp .env.example .env
+test -f .env || cp .env.example .env
 docker compose -f compose.yaml -f compose.full.yaml up -d --build
 ```
 
