@@ -34,9 +34,11 @@ cd frontend && npm ci && npm run dev
 ```bash
 cp .env.example .env
 docker compose -f compose.yaml -f compose.full.yaml up -d --build
+curl -fsS http://localhost:8080/actuator/health
+curl -fsS http://localhost:8080/
 ```
 
-Open `http://localhost:8080` after the services become healthy. The frontend serves the SPA and proxies `/api` and `/actuator` to the internal backend service.
+The health request should return `UP`, and the root request should return the FishBook HTML shell. Open `http://localhost:8080` after the services become healthy. The frontend serves the SPA and proxies `/api` and `/actuator` to the internal backend service.
 
 Stop the full stack without deleting the local MySQL or MinIO data volumes:
 
