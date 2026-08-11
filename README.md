@@ -1,5 +1,7 @@
 # FishBook
 
+FishBook is a learning-oriented fish encyclopedia project. The first delivery slice provides a same-origin React and Spring Boot application with registration, session login, profile editing, and logout.
+
 ## Prerequisites
 
 - Temurin JDK 21
@@ -10,12 +12,12 @@
 
 ```bash
 cp .env.example .env
-docker compose up -d
-cd backend && ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
-cd ../frontend && npm ci && npm run dev
+docker compose -f compose.yaml -f compose.full.yaml up -d --build
 ```
 
-`.env` contains local-only values and must never be committed.
+Wait for the services to become healthy, then open `http://localhost:8080`. This full-stack path serves the SPA and API through one origin.
+
+`.env` contains local-only values and must never be committed. See the [local development runbook](docs/runbooks/local-development.md) for dependency-only development, logs, database inspection, and recovery steps.
 
 ## Backend
 
@@ -50,8 +52,12 @@ docker compose -f compose.yaml -f compose.full.yaml down
 
 ```bash
 cd backend && ./mvnw test
-cd frontend && npm test
+cd ../frontend && npm ci && npm run lint && npm test && npm run build
+cd ../e2e && npm ci && npx playwright install chromium && npm test
+cd .. && docker compose -f compose.yaml -f compose.full.yaml config --quiet
 ```
+
+The Playwright test requires the full stack to be running at `http://localhost:8080`.
 
 ## Environment Variables
 
@@ -62,3 +68,5 @@ Copy `.env.example` to `.env` for local development. Keep `.env` local-only and 
 Verify the required tool versions, then restart Docker Desktop if Docker commands are unavailable.
 
 `docker compose down` stops the local dependencies while preserving their data volumes.
+
+For Flyway or session-storage diagnosis, follow the [local development runbook](docs/runbooks/local-development.md).
