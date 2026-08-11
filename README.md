@@ -34,7 +34,7 @@ cd frontend && npm ci && npm run dev
 ## Full Stack
 
 ```bash
-cp .env.example .env
+test -f .env || cp .env.example .env
 docker compose -f compose.yaml -f compose.full.yaml up -d --build
 curl -fsS http://localhost:8080/actuator/health
 curl -fsS http://localhost:8080/
