@@ -39,4 +39,17 @@ class CatalogDatabaseMigrationTest {
                 Integer.class);
         assertThat(primaryKeyColumns).isEqualTo(2);
     }
+
+    @Test
+    void seedsTheCuratedFishCatalogInDisplayOrderWithImageAttribution() {
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM fish_species", Integer.class))
+                .isEqualTo(12);
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT common_name_zh FROM fish_species ORDER BY display_order", String.class))
+                .containsExactly("鲫", "鲤", "草鱼", "青鱼", "鲢", "鳙", "乌鳢", "鳜", "黄颡鱼", "团头鲂", "翘嘴鲌", "泥鳅");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM fish_species WHERE image_source_url = '' "
+                        + "OR image_author = '' OR image_license_name = '' OR image_license_url = ''",
+                Integer.class)).isZero();
+    }
 }

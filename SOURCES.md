@@ -1,0 +1,3 @@
+# Catalog source audit
+
+The Task 4 provenance table is maintained in [docs/data-sources/fish-catalog-attribution.md](docs/data-sources/fish-catalog-attribution.md). On 2026-08-11, `File:Misgurnus_anguillicaudatus.jpg` was rejected because its Commons record lacked a robust machine-readable author/source chain. The local `misgurnus-anguillicaudatus.jpg` asset instead comes from [File:Weather Loach.jpg](https://commons.wikimedia.org/wiki/File:Weather_Loach.jpg): own work by PrinceNimblesoft, CC0 1.0 Universal. Commons file history records a 2020 color adjustment by Togabi. The local asset was proportionally resized to a 1600 px maximum long edge and JPEG re-encoded without cropping.
