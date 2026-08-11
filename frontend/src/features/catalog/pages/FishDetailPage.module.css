@@ -1,0 +1,171 @@
+.page {
+  box-sizing: border-box;
+  width: min(100%, 76rem);
+  margin: 0 auto;
+  padding: 1.5rem;
+  color: #17302a;
+}
+
+.navigation {
+  margin-bottom: 1.25rem;
+}
+
+.navigation a,
+.attribution a,
+.message a,
+.message button {
+  color: #075f4b;
+  font-weight: 600;
+}
+
+.navigation a:focus-visible,
+.attribution a:focus-visible,
+.message a:focus-visible,
+.message button:focus-visible {
+  outline: 3px solid #e4a11b;
+  outline-offset: 3px;
+}
+
+.detail {
+  border: 1px solid #c9d9d1;
+  border-radius: 0.75rem;
+  background: #fff;
+  box-shadow: 0 0.25rem 0.75rem rgb(23 48 42 / 8%);
+}
+
+.header {
+  padding: 1.5rem 1.5rem 0;
+}
+
+.header h1,
+.header p {
+  margin: 0;
+}
+
+.header p {
+  margin-top: 0.4rem;
+  color: #456057;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.85fr) minmax(0, 1.15fr);
+  gap: 2rem;
+  padding: 1.5rem;
+}
+
+.figure {
+  margin: 0;
+}
+
+.figure img,
+.imageFallback {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 0.5rem;
+  object-fit: cover;
+  background: #dce8e2;
+}
+
+.imageFallback {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 1rem;
+  color: #466158;
+}
+
+.attribution {
+  margin-top: 0.75rem;
+  color: #456057;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.content {
+  display: grid;
+  align-content: start;
+  gap: 1.5rem;
+}
+
+.content h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.2rem;
+}
+
+.taxonomy,
+.facts {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.taxonomy div,
+.facts div {
+  display: grid;
+  grid-template-columns: minmax(5rem, auto) minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.taxonomy dt,
+.facts dt {
+  color: #456057;
+  font-weight: 600;
+}
+
+.taxonomy dd,
+.facts dd {
+  max-width: 70ch;
+  margin: 0;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.message {
+  display: grid;
+  justify-items: start;
+  gap: 0.75rem;
+  margin: 2rem 0;
+  padding: 1rem;
+  border-left: 0.25rem solid #3f8f75;
+  background: #f4faf7;
+}
+
+.message h1,
+.message p {
+  margin: 0;
+}
+
+.message button {
+  min-height: 2.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #89a79b;
+  border-radius: 0.4rem;
+  background: #fff;
+  font: inherit;
+}
+
+@media (max-width: 48rem) {
+  .page {
+    padding: 1rem;
+  }
+
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 30rem) {
+  .header,
+  .layout {
+    padding: 1rem;
+  }
+
+  .taxonomy div,
+  .facts div {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+}
