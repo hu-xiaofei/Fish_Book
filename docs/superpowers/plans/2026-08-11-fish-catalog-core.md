@@ -1569,14 +1569,16 @@ test('submits a trimmed search and resets page', async () => {
   const { user } = renderCatalog('/?page=2');
   await user.type(screen.getByRole('searchbox', { name: '搜索鱼类' }), '  黑鱼  ');
   await user.click(screen.getByRole('button', { name: '搜索' }));
-  expect(screen.getByTestId('location')).toHaveTextContent('/?q=黑鱼');
+  expect(screen.getByTestId('location')).toHaveTextContent(
+    '/?q=%E9%BB%91%E9%B1%BC',
+  );
 });
 
 test('changing habitat keeps other filters and resets page', async () => {
   const { user } = renderCatalog('/?q=鲤&family=鲤科&page=2');
   await user.selectOptions(screen.getByLabelText('栖息环境'), 'LAKE');
   expect(screen.getByTestId('location')).toHaveTextContent(
-    '/?q=鲤&family=鲤科&habitat=LAKE',
+    '/?q=%E9%B2%A4&family=%E9%B2%A4%E7%A7%91&habitat=LAKE',
   );
 });
 ```
