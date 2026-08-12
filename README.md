@@ -3,6 +3,7 @@
 [简体中文](#zh-cn) | [English](#en)
 
 <a id="zh-cn"></a>
+
 ## 简体中文
 
 ### 项目简介
@@ -114,7 +115,7 @@ cd .. && docker compose --env-file .env.example -f compose.yaml -f compose.full.
 
 - 后端测试使用 Testcontainers 启动真实 MySQL，因此需要 Docker 正在运行。
 - Playwright 测试需要先通过完整 Docker Compose 命令启动应用。
-- GitHub Actions 会在推送和 Pull Request 时执行后端、前端、Docker 与端到端测试。
+- 以上是与 CI 覆盖范围一致的本地验证流程。GitHub Actions 会在推送到 `main` 和 Pull Request 时执行后端、前端、Docker 与端到端测试；Linux CI 还会使用 Maven 批处理模式、安装 Playwright 系统依赖，并在端到端测试前启动和等待完整服务栈。
 
 ### 项目结构
 
@@ -149,6 +150,7 @@ Fish_Book/
 ---
 
 <a id="en"></a>
+
 ## English
 
 ### Overview
@@ -260,7 +262,7 @@ cd .. && docker compose --env-file .env.example -f compose.yaml -f compose.full.
 
 - Backend tests use Testcontainers with a real MySQL instance, so Docker must be running.
 - Playwright requires the full application stack to be running first.
-- GitHub Actions runs backend, frontend, Docker, and end-to-end verification for pushes and pull requests.
+- The commands above are the local equivalent of the CI verification scope. GitHub Actions runs backend, frontend, Docker, and end-to-end checks for pushes to `main` and for pull requests; Linux CI additionally uses Maven batch mode, installs Playwright system dependencies, and starts and waits for the full stack before the end-to-end tests.
 
 ### Project Structure
 

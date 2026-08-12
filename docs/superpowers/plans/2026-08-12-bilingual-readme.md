@@ -63,6 +63,7 @@ Write the following content in this exact section order:
 [简体中文](#zh-cn) | [English](#en)
 
 <a id="zh-cn"></a>
+
 ## 简体中文
 ### 项目简介
 ### 当前功能
@@ -78,6 +79,7 @@ Write the following content in this exact section order:
 ---
 
 <a id="en"></a>
+
 ## English
 ### Overview
 ### Current Features
@@ -119,7 +121,7 @@ docker compose -f compose.yaml -f compose.full.yaml ps
 docker compose -f compose.yaml -f compose.full.yaml down
 ```
 
-- Test commands match CI and explain that Docker is required for backend Testcontainers and the full stack must be running for Playwright:
+- Test commands provide a local equivalent of CI coverage and explain that Docker is required for backend Testcontainers and the full stack must be running for Playwright:
 
 ```bash
 cd backend && ./mvnw test
@@ -127,6 +129,8 @@ cd ../frontend && npm ci && npm run lint && npm test && npm run build
 cd ../e2e && npm ci && npx playwright install chromium && npm test
 cd .. && docker compose --env-file .env.example -f compose.yaml -f compose.full.yaml config --quiet
 ```
+
+- Both language sections state that CI runs for pushes to `main` and for pull requests. They also distinguish the Linux CI details from the local sequence: Maven batch mode, Playwright `--with-deps`, and Compose startup/health waiting before end-to-end tests.
 
 - The project tree contains `backend/`, `frontend/`, `e2e/`, `docs/`, `compose.yaml`, and `compose.full.yaml`, each with a short purpose.
 - Documentation links point to:
@@ -142,9 +146,9 @@ Run:
 
 ```bash
 rg -q '^\[简体中文\]\(#zh-cn\) \| \[English\]\(#en\)$' README.md \
-  && rg -q '^<a id="zh-cn"></a>$' README.md \
+  && rg -Uq '<a id="zh-cn"></a>\n\n## 简体中文' README.md \
   && rg -q '^## 简体中文$' README.md \
-  && rg -q '^<a id="en"></a>$' README.md \
+  && rg -Uq '<a id="en"></a>\n\n## English' README.md \
   && rg -q '^## English$' README.md \
   && rg -q '公开只读鱼类图鉴' README.md \
   && rg -q 'Public read-only fish catalog' README.md \
