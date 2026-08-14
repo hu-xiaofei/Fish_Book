@@ -8,6 +8,7 @@ import {
 } from '../../auth/api/currentUser';
 import {
   favoriteStatusQueryKey,
+  favoriteStatusQueryRetry,
   fetchFavoriteStatuses,
 } from '../../favorites/api/favoritesApi';
 import { FavoriteButton } from '../../favorites/components/FavoriteButton';
@@ -47,6 +48,7 @@ export function FishDetailPage() {
     queryKey: favoriteStatusQueryKey(slug ? [slug] : []),
     queryFn: () => fetchFavoriteStatuses(slug ? [slug] : []),
     enabled: Boolean(currentUser.data && detail.data && slug),
+    retry: favoriteStatusQueryRetry,
   });
   const returnPath = catalogReturnPath(location.state);
   const isMissingFish = detail.error instanceof ApiError

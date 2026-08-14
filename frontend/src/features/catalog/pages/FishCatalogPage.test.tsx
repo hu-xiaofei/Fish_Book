@@ -3,7 +3,9 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
+import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
+import { favoriteStatusQueryKey } from '../../favorites/api/favoritesApi';
 import type { FishFilterOptions, FishPage, FishSummary } from '../model/types';
 import { FishCatalogPage } from './FishCatalogPage';
 
@@ -83,12 +85,13 @@ function SearchNavigation() {
   return <Link to="/?q=%E9%B2%A4">导航到鲤</Link>;
 }
 
-function renderCatalog(initialEntry: string) {
+function renderCatalog(initialEntry: string, queryRetry: boolean | number = false) {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry: queryRetry, retryDelay: 0 } },
   });
   const user = userEvent.setup();
   return {
+    queryClient,
     user,
     ...render(
       <QueryClientProvider client={queryClient}>
@@ -123,6 +126,24 @@ test('loads favorite statuses for all 12 visible fish in one batch request', asy
   expect(fetchFavoriteStatusesMock).toHaveBeenCalledWith(
     pageWith12Fish.items.map((fish) => fish.slug),
   );
+});
+
+test('does not retry an unauthorized favorite status request', async () => {
+  fetchFavoriteStatusesMock.mockRejectedValue(new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED',
+    message: '请先登录',
+    fieldErrors: [],
+    requestId: 'test-request',
+  }));
+  const { queryClient } = renderCatalog('/', 2);
+  const statusQueryKey = favoriteStatusQueryKey(
+    pageWith12Fish.items.map((fish) => fish.slug),
+  );
+
+  await waitFor(() => {
+    expect(queryClient.getQueryState(statusQueryKey)?.status).toBe('error');
+  });
+  expect(fetchFavoriteStatusesMock).toHaveBeenCalledTimes(1);
 });
 
 test('renders cards and hides pagination for one page', async () => {

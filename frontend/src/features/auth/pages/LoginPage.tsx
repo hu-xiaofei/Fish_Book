@@ -19,6 +19,25 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 const genericLoginError = '登录失败，请稍后重试';
 
+function safeReturnPath(value: string | null): string {
+  if (
+    !value
+    || !value.startsWith('/')
+    || value.startsWith('//')
+    || value.includes('\\')
+  ) {
+    return '/profile';
+  }
+
+  try {
+    const resolved = new URL(value, window.location.origin);
+    if (resolved.origin !== window.location.origin) return '/profile';
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  } catch {
+    return '/profile';
+  }
+}
+
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -26,9 +45,7 @@ export function LoginPage() {
   const [serverError, setServerError] = useState<string>();
   const registrationMessage = (location.state as { message?: string } | null)?.message;
   const returnTo = new URLSearchParams(location.search).get('returnTo');
-  const safeReturnTo = returnTo?.startsWith('/') && !returnTo.startsWith('//')
-    ? returnTo
-    : '/profile';
+  const safeReturnTo = safeReturnPath(returnTo);
   const {
     register,
     handleSubmit,

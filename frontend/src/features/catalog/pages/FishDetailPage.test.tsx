@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
+import { favoriteStatusQueryKey } from '../../favorites/api/favoritesApi';
 import type { FishDetail } from '../model/types';
 import { FishDetailPage } from './FishDetailPage';
 
@@ -69,20 +70,24 @@ const authenticatedUser: User = {
 
 function renderDetail(
   initialEntry: string | { pathname: string; state?: { from: string } },
+  queryRetry: boolean | number = false,
 ) {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry: queryRetry, retryDelay: 0 } },
   });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[initialEntry]}>
-        <Routes>
-          <Route path="/fish/:slug" element={<FishDetailPage />} />
-          <Route path="/" element={<h1>图鉴</h1>} />
-        </Routes>
-      </MemoryRouter>
-    </QueryClientProvider>,
-  );
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <Routes>
+            <Route path="/fish/:slug" element={<FishDetailPage />} />
+            <Route path="/" element={<h1>图鉴</h1>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 beforeEach(() => {
@@ -102,6 +107,23 @@ test('loads the favorite status once for the detail fish', async () => {
   expect(await screen.findByRole('heading', { name: '乌鳢' })).toBeInTheDocument();
   await waitFor(() => expect(fetchFavoriteStatusesMock).toHaveBeenCalledTimes(1));
   expect(fetchFavoriteStatusesMock).toHaveBeenCalledWith(['channa-argus']);
+});
+
+test('does not retry an unauthorized detail favorite status request', async () => {
+  fetchFavoriteStatusesMock.mockRejectedValue(new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED',
+    message: '请先登录',
+    fieldErrors: [],
+    requestId: 'test-request',
+  }));
+  const { queryClient } = renderDetail('/fish/channa-argus', 2);
+
+  await waitFor(() => {
+    expect(
+      queryClient.getQueryState(favoriteStatusQueryKey(['channa-argus']))?.status,
+    ).toBe('error');
+  });
+  expect(fetchFavoriteStatusesMock).toHaveBeenCalledTimes(1);
 });
 
 test('renders classification, content, and visible image attribution', async () => {

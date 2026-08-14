@@ -115,6 +115,21 @@ test('successful login rejects a protocol-relative return target', async () => {
   expect(await screen.findByText('个人资料')).toBeInTheDocument();
 });
 
+test('successful login rejects a backslash authority return target', async () => {
+  loginMock.mockResolvedValue({
+    id: 1,
+    email: 'angler@example.com',
+    nickname: 'Wall_E',
+    role: 'USER',
+  } satisfies User);
+  const { user } = renderLoginPage('/login?returnTo=%2F%5Cevil.example');
+
+  await fillLoginForm(user);
+  await user.click(screen.getByRole('button', { name: '登录' }));
+
+  expect(await screen.findByText('个人资料')).toBeInTheDocument();
+});
+
 test('invalid credentials show the server message', async () => {
   loginMock.mockRejectedValue(new ApiError(401, {
     code: 'INVALID_CREDENTIALS',

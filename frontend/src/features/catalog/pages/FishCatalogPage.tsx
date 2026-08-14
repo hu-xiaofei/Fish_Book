@@ -7,6 +7,7 @@ import {
 } from '../../auth/api/currentUser';
 import {
   favoriteStatusQueryKey,
+  favoriteStatusQueryRetry,
   fetchFavoriteStatuses,
 } from '../../favorites/api/favoritesApi';
 import {
@@ -46,6 +47,7 @@ export function FishCatalogPage() {
     queryKey: favoriteStatusQueryKey(visibleFishSlugs),
     queryFn: () => fetchFavoriteStatuses(visibleFishSlugs),
     enabled: Boolean(currentUser.data && fishQuery.data && visibleFishSlugs.length > 0),
+    retry: favoriteStatusQueryRetry,
   });
   const filterQuery = useQuery({
     queryKey: fishFilterOptionsQueryKey,
