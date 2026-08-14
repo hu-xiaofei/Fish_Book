@@ -1,0 +1,162 @@
+.page {
+  box-sizing: border-box;
+  width: min(100%, 76rem);
+  margin: 0 auto;
+  padding: 1.5rem;
+  color: #17302a;
+}
+
+.header {
+  display: flex;
+  gap: 1.5rem;
+  align-items: start;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #c9d9d1;
+  padding-bottom: 1.25rem;
+}
+
+.header h1,
+.header p {
+  margin: 0;
+}
+
+.header p {
+  margin-top: 0.4rem;
+  color: #587068;
+}
+
+.navigation,
+.navigation nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: center;
+}
+
+.navigation a,
+.cardGrid a,
+.pagination button,
+.message a,
+.message button {
+  color: #075f4b;
+  font-weight: 600;
+}
+
+.navigation a:focus-visible,
+.navigation button:focus-visible,
+.cardGrid a:focus-visible,
+.cardGrid button:focus-visible,
+.pagination button:focus-visible,
+.message a:focus-visible,
+.message button:focus-visible {
+  outline: 3px solid #e4a11b;
+  outline-offset: 3px;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+}
+
+.cardGrid article {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  border: 1px solid #c9d9d1;
+  border-radius: 0.75rem;
+  background: #fff;
+  box-shadow: 0 0.25rem 0.75rem rgb(23 48 42 / 8%);
+}
+
+.cardGrid img,
+.cardGrid [role='img'] {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: #dce8e2;
+}
+
+.cardGrid [role='img'] {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 1rem;
+  color: #466158;
+}
+
+.cardGrid article > div:last-child {
+  display: grid;
+  align-content: start;
+  gap: 0.45rem;
+  padding: 1rem;
+}
+
+.cardGrid h2,
+.cardGrid p {
+  margin: 0;
+}
+
+.cardGrid p {
+  overflow-wrap: anywhere;
+  color: #456057;
+}
+
+.cardGrid i {
+  font-size: 0.95rem;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+.pagination nav {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.pagination button,
+.message button {
+  min-height: 2.75rem;
+  box-sizing: border-box;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #89a79b;
+  border-radius: 0.4rem;
+  background: #fff;
+  font: inherit;
+}
+
+.message {
+  display: grid;
+  justify-items: start;
+  gap: 0.75rem;
+  margin: 2rem 0;
+  padding: 1rem;
+  border-left: 0.25rem solid #3f8f75;
+  background: #f4faf7;
+}
+
+.message h2,
+.message p {
+  margin: 0;
+}
+
+@media (max-width: 40rem) {
+  .page {
+    padding: 1rem;
+  }
+
+  .header {
+    display: grid;
+  }
+
+  .pagination nav {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}

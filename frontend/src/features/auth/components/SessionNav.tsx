@@ -36,6 +36,7 @@ export function SessionNav() {
   return (
     <nav aria-label="用户导航">
       <Link to="/profile">个人资料</Link>{' '}
+      <Link to="/favorites">我的收藏</Link>{' '}
       <button
         type="button"
         disabled={logoutMutation.isPending}

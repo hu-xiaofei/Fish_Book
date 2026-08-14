@@ -4,6 +4,7 @@ import { LoginPage } from '../features/auth/pages/LoginPage';
 import { ProfilePage } from '../features/auth/pages/ProfilePage';
 import { RegisterPage } from '../features/auth/pages/RegisterPage';
 import { FishDetailPage } from '../features/catalog/pages/FishDetailPage';
+import { FavoritesPage } from '../features/favorites/pages/FavoritesPage';
 import { App } from './App';
 
 export const router = createBrowserRouter([
@@ -28,6 +29,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <ProfilePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/favorites',
+    element: (
+      <ProtectedRoute>
+        <FavoritesPage />
       </ProtectedRoute>
     ),
   },

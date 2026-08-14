@@ -1,8 +1,12 @@
 import { ApiError } from '../../../shared/api/ApiError';
 import { apiFetch } from '../../../shared/api/httpClient';
-import type { FavoriteStatusResponse } from '../model/types';
+import type { FavoritePage, FavoriteStatusResponse } from '../model/types';
 
 export const FAVORITES_QUERY_KEY = ['favorites'] as const;
+
+export function favoritePageQueryKey(page: number) {
+  return [...FAVORITES_QUERY_KEY, 'page', page] as const;
+}
 
 export function favoriteStatusQueryKey(slugs: readonly string[]) {
   return [...FAVORITES_QUERY_KEY, 'status', ...[...slugs].sort()] as const;
@@ -22,6 +26,10 @@ export function fetchFavoriteStatuses(
   return apiFetch<FavoriteStatusResponse>(
     `/api/v1/favorites/status?${searchParams.toString()}`,
   );
+}
+
+export function fetchFavoritePage(page: number): Promise<FavoritePage> {
+  return apiFetch<FavoritePage>(`/api/v1/favorites?page=${page}`);
 }
 
 export function addFavorite(fishSlug: string): Promise<void> {

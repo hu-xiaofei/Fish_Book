@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   addFavorite,
+  favoritePageQueryKey,
   favoriteStatusQueryKey,
+  fetchFavoritePage,
   fetchFavoriteStatuses,
   removeFavorite,
 } from './favoritesApi';
@@ -28,6 +30,24 @@ describe('favorites API', () => {
 
     expect(favoriteStatusQueryKey(slugs)).toEqual(['favorites', 'status', 'a', 'b']);
     expect(slugs).toEqual(['b', 'a']);
+  });
+
+  test('builds a page-scoped key and requests the fixed-size page without a size parameter', async () => {
+    const response = {
+      items: [],
+      page: 2,
+      size: 12,
+      totalItems: 25,
+      totalPages: 3,
+    };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(response));
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(favoritePageQueryKey(2)).toEqual(['favorites', 'page', 2]);
+    await expect(fetchFavoritePage(2)).resolves.toEqual(response);
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/favorites?page=2');
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ credentials: 'include' });
   });
 
   test('requests all statuses once with repeated encoded parameters in visible order', async () => {
