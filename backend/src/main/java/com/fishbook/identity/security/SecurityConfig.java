@@ -16,11 +16,14 @@ import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
@@ -103,9 +106,24 @@ public class SecurityConfig {
             ObjectMapper objectMapper) throws Exception {
         RequestMatcher authenticationRequiredEndpoints = new OrRequestMatcher(
                 PathPatternRequestMatcher.pathPattern("/api/v1/me/**"),
+                PathPatternRequestMatcher.pathPattern("/api/v1/favorites/**"),
                 PathPatternRequestMatcher.pathPattern("/api/v1/auth/logout"));
         AccessDeniedHandler accessDeniedHandler = (request, response, exception) -> {
             if (exception instanceof CsrfException) {
+                Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+                if (authenticationRequiredEndpoints.matches(request)
+                        && (authentication == null
+                        || !authentication.isAuthenticated()
+                        || authentication instanceof AnonymousAuthenticationToken)) {
+                    writeError(
+                            objectMapper,
+                            request,
+                            response,
+                            HttpStatus.UNAUTHORIZED,
+                            "AUTHENTICATION_REQUIRED",
+                            "Authentication is required");
+                    return;
+                }
                 writeError(
                         objectMapper,
                         request,

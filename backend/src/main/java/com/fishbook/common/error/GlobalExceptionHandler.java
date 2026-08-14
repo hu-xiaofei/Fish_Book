@@ -2,6 +2,7 @@ package com.fishbook.common.error;
 
 import com.fishbook.catalog.application.InvalidCatalogQueryException;
 import com.fishbook.catalog.domain.FishNotFoundException;
+import com.fishbook.favorites.application.InvalidFavoriteQueryException;
 import com.fishbook.identity.domain.DuplicateEmailException;
 import com.fishbook.identity.domain.InvalidEmailException;
 import com.fishbook.identity.domain.InvalidNicknameException;
@@ -38,6 +39,18 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST,
                 exception.code(),
                 "Catalog query is invalid",
+                List.of(),
+                request);
+    }
+
+    @ExceptionHandler(InvalidFavoriteQueryException.class)
+    ResponseEntity<ApiErrorResponse> handleInvalidFavoriteQuery(
+            InvalidFavoriteQueryException exception,
+            HttpServletRequest request) {
+        return error(
+                HttpStatus.BAD_REQUEST,
+                exception.code(),
+                "Favorite query is invalid",
                 List.of(),
                 request);
     }
