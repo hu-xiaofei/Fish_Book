@@ -9,7 +9,7 @@ test('keeps a personal favorite through navigation and removes it persistently',
   await page.getByLabel('密码').fill('strong-pass');
   await page.getByLabel('昵称').fill('Favorite Angler');
   await page.getByRole('button', { name: '注册' }).click();
-  await expect(page.getByText('注册成功，请登录')).toBeVisible();
+  await expect(page.getByRole('status')).toHaveText('注册成功，请登录');
 
   await page.getByLabel('邮箱').fill(email);
   await page.getByLabel('密码').fill('strong-pass');
