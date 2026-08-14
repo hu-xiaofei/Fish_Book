@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { SessionNav } from '../../auth/components/SessionNav';
+import { isConfirmedUnauthorized } from '../../auth/api/currentUser';
+import { useFavoriteSessionExpiry } from '../../auth/hooks/useExpireSessionOnUnauthorized';
 import { FavoriteButton } from '../components/FavoriteButton';
 import {
   favoritePageQueryKey,
@@ -76,11 +78,16 @@ export function FavoritesPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const page = parsePage(searchParams.get('page'));
+  const { sessionExpired, expireIfUnauthorized } = useFavoriteSessionExpiry();
   const favoritesQuery = useQuery({
     queryKey: favoritePageQueryKey(page),
     queryFn: () => fetchFavoritePage(page),
+    enabled: !sessionExpired,
     retry: favoriteStatusQueryRetry,
   });
+  useEffect(() => {
+    expireIfUnauthorized(favoritesQuery.error);
+  }, [expireIfUnauthorized, favoritesQuery.error]);
   const returnTo = `${location.pathname}${location.search}`;
 
   useEffect(() => {
@@ -108,6 +115,10 @@ export function FavoritesPage() {
     }
     setSearchParams({ page: String(nextPage) });
   };
+
+  if (sessionExpired || isConfirmedUnauthorized(favoritesQuery.error)) {
+    return <Navigate to="/login" replace />;
+  }
 
   return (
     <main className={styles.page}>

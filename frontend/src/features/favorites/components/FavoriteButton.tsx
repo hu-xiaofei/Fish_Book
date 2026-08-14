@@ -6,6 +6,8 @@ import {
   hasUsableCurrentUser,
   isConfirmedUnauthorized,
 } from '../../auth/api/currentUser';
+import { expireSessionOnUnauthorized } from '../../auth/api/sessionCache';
+import { useConfirmedUnauthorizedSession } from '../../auth/hooks/useConfirmedUnauthorizedSession';
 import {
   addFavorite,
   FAVORITES_QUERY_KEY,
@@ -33,13 +35,17 @@ export function FavoriteButton({
     currentUser.data,
     currentUser.error,
   );
-  const confirmedUnauthorized = isConfirmedUnauthorized(currentUser.error);
+  const confirmedUnauthorized = useConfirmedUnauthorizedSession(currentUser.error);
   const effectiveIsFavorited = hasAuthenticatedSession && isFavorited;
   const mutation = useMutation({
     mutationFn: () => (
       effectiveIsFavorited ? removeFavorite(fishSlug) : addFavorite(fishSlug)
     ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: FAVORITES_QUERY_KEY }),
+    onError: (error) => {
+      if (!expireSessionOnUnauthorized(queryClient, error)) return;
+      navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+    },
   });
 
   const label = effectiveIsFavorited ? '取消收藏' : '收藏';
@@ -67,7 +73,7 @@ export function FavoriteButton({
       >
         {mutation.isPending ? '处理中…' : label}
       </button>
-      {mutation.isError ? (
+      {mutation.isError && !isConfirmedUnauthorized(mutation.error) ? (
         <p role="status" aria-live="polite">收藏操作失败，请稍后重试</p>
       ) : null}
     </>

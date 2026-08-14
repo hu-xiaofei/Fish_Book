@@ -7,7 +7,10 @@ import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
 import { deferred } from '../../../test/renderWithProviders';
 import { CURRENT_USER_QUERY_KEY } from '../../auth/api/currentUser';
-import { favoriteStatusQueryKey } from '../../favorites/api/favoritesApi';
+import {
+  FAVORITES_QUERY_KEY,
+  favoriteStatusQueryKey,
+} from '../../favorites/api/favoritesApi';
 import type { FishDetail } from '../model/types';
 import { FishDetailPage } from './FishDetailPage';
 
@@ -74,13 +77,20 @@ function renderDetail(
   initialEntry: string | { pathname: string; state?: { from: string } },
   queryRetry: boolean | number = false,
   cachedUser?: User,
+  cachedUserUpdatedAt = 1,
+  prepareQueryClient?: (queryClient: QueryClient) => void,
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: queryRetry, retryDelay: 0 } },
   });
   if (cachedUser) {
-    queryClient.setQueryData(CURRENT_USER_QUERY_KEY, cachedUser, { updatedAt: 1 });
+    queryClient.setQueryData(
+      CURRENT_USER_QUERY_KEY,
+      cachedUser,
+      { updatedAt: cachedUserUpdatedAt },
+    );
   }
+  prepareQueryClient?.(queryClient);
   return {
     queryClient,
     ...render(
@@ -115,20 +125,55 @@ test('loads the favorite status once for the detail fish', async () => {
   expect(fetchFavoriteStatusesMock).toHaveBeenCalledWith(['channa-argus']);
 });
 
+test('does not present an unknown detail favorite state while status is loading', async () => {
+  fetchFavoriteStatusesMock.mockReturnValue(deferred().promise);
+
+  renderDetail('/fish/channa-argus');
+
+  expect(await screen.findByRole('status', { name: '正在加载收藏状态' }))
+    .toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '收藏' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '取消收藏' })).not.toBeInTheDocument();
+});
+
+test('detail status outage hides the unknown state and recovers with one-slug retry', async () => {
+  fetchFavoriteStatusesMock.mockRejectedValue(new ApiError(500, {
+    code: 'INTERNAL_ERROR',
+    message: 'status unavailable',
+    fieldErrors: [],
+    requestId: 'test-request',
+  }));
+  const user = userEvent.setup();
+  renderDetail('/fish/channa-argus');
+
+  expect(await screen.findByRole('status', { name: '收藏状态加载失败' }))
+    .toHaveTextContent('加载收藏状态失败，请稍后重试');
+  expect(fetchFavoriteStatusesMock).toHaveBeenCalledTimes(3);
+  expect(screen.queryByRole('button', { name: '收藏' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '取消收藏' })).not.toBeInTheDocument();
+
+  fetchFavoriteStatusesMock.mockResolvedValueOnce({
+    items: [{ fishSlug: 'channa-argus', favorited: false }],
+  });
+  await user.click(screen.getByRole('button', { name: '重试收藏状态' }));
+
+  await waitFor(() => expect(fetchFavoriteStatusesMock).toHaveBeenCalledTimes(4));
+  expect(fetchFavoriteStatusesMock).toHaveBeenLastCalledWith(['channa-argus']);
+  expect(await screen.findByRole('button', { name: '收藏' })).toBeInTheDocument();
+});
+
 test('does not retry an unauthorized detail favorite status request', async () => {
-  fetchFavoriteStatusesMock.mockRejectedValue(new ApiError(401, {
+  const unauthorized = new ApiError(401, {
     code: 'AUTHENTICATION_REQUIRED',
     message: '请先登录',
     fieldErrors: [],
     requestId: 'test-request',
-  }));
-  const { queryClient } = renderDetail('/fish/channa-argus', 2);
-
-  await waitFor(() => {
-    expect(
-      queryClient.getQueryState(favoriteStatusQueryKey(['channa-argus']))?.status,
-    ).toBe('error');
   });
+  fetchCurrentUserMock.mockRejectedValue(unauthorized);
+  fetchFavoriteStatusesMock.mockRejectedValue(unauthorized);
+  renderDetail('/fish/channa-argus', 2, authenticatedUser, Date.now());
+
+  expect(await screen.findByRole('button', { name: '收藏' })).toBeInTheDocument();
   expect(fetchFavoriteStatusesMock).toHaveBeenCalledTimes(1);
 });
 
@@ -159,6 +204,39 @@ test('confirmed expired detail session ignores retained favorite flag and skips 
   expect(await screen.findByRole('heading', { name: '乌鳢' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '取消收藏' })).not.toBeInTheDocument();
   expect(fetchFavoriteStatusesMock).not.toHaveBeenCalled();
+});
+
+test('detail favorite status 401 expires a fresh session and clears private state', async () => {
+  const unauthorized = new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED',
+    message: '请先登录',
+    fieldErrors: [],
+    requestId: 'test-request',
+  });
+  fetchCurrentUserMock.mockRejectedValue(unauthorized);
+  fetchFavoriteStatusesMock.mockRejectedValue(unauthorized);
+  const statusKey = favoriteStatusQueryKey(['channa-argus']);
+  const { queryClient } = renderDetail(
+    '/fish/channa-argus',
+    false,
+    authenticatedUser,
+    Date.now(),
+    (client) => client.setQueryData(
+      statusKey,
+      { items: [{ fishSlug: 'channa-argus', favorited: true }] },
+      { updatedAt: 1 },
+    ),
+  );
+
+  await waitFor(() => expect(fetchFavoriteStatusesMock).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(fetchCurrentUserMock).toHaveBeenCalledTimes(1));
+  expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toBeUndefined();
+  expect(
+    queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY })
+      .every(([, data]) => data === undefined),
+  ).toBe(true);
+  expect(await screen.findByRole('button', { name: '收藏' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '取消收藏' })).not.toBeInTheDocument();
 });
 
 test('renders classification, content, and visible image attribution', async () => {

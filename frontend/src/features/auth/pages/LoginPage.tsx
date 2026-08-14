@@ -6,9 +6,9 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiError } from '../../../shared/api/ApiError';
 import { FormField } from '../../../shared/ui/FormField';
-import { FAVORITES_QUERY_KEY } from '../../favorites/api/favoritesApi';
 import { login } from '../api/authApi';
 import { CURRENT_USER_QUERY_KEY } from '../api/currentUser';
+import { clearSessionScopedQueries } from '../api/sessionCache';
 import styles from './RegisterPage.module.css';
 
 const loginSchema = z.object({
@@ -60,7 +60,7 @@ export function LoginPage() {
 
     try {
       const user = await login(input);
-      queryClient.removeQueries({ queryKey: FAVORITES_QUERY_KEY });
+      clearSessionScopedQueries(queryClient);
       queryClient.setQueryData(CURRENT_USER_QUERY_KEY, user);
       navigate(safeReturnTo, { replace: true });
     } catch (error) {

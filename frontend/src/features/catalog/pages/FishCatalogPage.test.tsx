@@ -7,7 +7,10 @@ import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
 import { deferred } from '../../../test/renderWithProviders';
 import { CURRENT_USER_QUERY_KEY } from '../../auth/api/currentUser';
-import { favoriteStatusQueryKey } from '../../favorites/api/favoritesApi';
+import {
+  FAVORITES_QUERY_KEY,
+  favoriteStatusQueryKey,
+} from '../../favorites/api/favoritesApi';
 import type { FishFilterOptions, FishPage, FishSummary } from '../model/types';
 import { FishCatalogPage } from './FishCatalogPage';
 
@@ -91,13 +94,20 @@ function renderCatalog(
   initialEntry: string,
   queryRetry: boolean | number = false,
   cachedUser?: User,
+  cachedUserUpdatedAt = 1,
+  prepareQueryClient?: (queryClient: QueryClient) => void,
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: queryRetry, retryDelay: 0 } },
   });
   if (cachedUser) {
-    queryClient.setQueryData(CURRENT_USER_QUERY_KEY, cachedUser, { updatedAt: 1 });
+    queryClient.setQueryData(
+      CURRENT_USER_QUERY_KEY,
+      cachedUser,
+      { updatedAt: cachedUserUpdatedAt },
+    );
   }
+  prepareQueryClient?.(queryClient);
   const user = userEvent.setup();
   return {
     queryClient,
@@ -140,6 +150,44 @@ test('loads favorite statuses for all 12 visible fish in one batch request', asy
   );
 });
 
+test('does not present unknown catalog favorite states while status is loading', async () => {
+  fetchFavoriteStatusesMock.mockReturnValue(deferred().promise);
+
+  renderCatalog('/');
+
+  expect(await screen.findByRole('status', { name: '正在加载收藏状态' }))
+    .toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '收藏' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '取消收藏' })).not.toBeInTheDocument();
+});
+
+test('catalog status outage hides unknown states and retries as one batch', async () => {
+  fetchFavoriteStatusesMock.mockRejectedValue(new ApiError(500, {
+    code: 'INTERNAL_ERROR',
+    message: 'status unavailable',
+    fieldErrors: [],
+    requestId: 'test-request',
+  }));
+  const { user } = renderCatalog('/');
+
+  expect(await screen.findByRole('status', { name: '收藏状态加载失败' }))
+    .toHaveTextContent('加载收藏状态失败，请稍后重试');
+  expect(fetchFavoriteStatusesMock).toHaveBeenCalledTimes(3);
+  expect(screen.queryByRole('button', { name: '收藏' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '取消收藏' })).not.toBeInTheDocument();
+
+  fetchFavoriteStatusesMock.mockResolvedValueOnce({
+    items: pageWith12Fish.items.map((fish) => ({ fishSlug: fish.slug, favorited: false })),
+  });
+  await user.click(screen.getByRole('button', { name: '重试收藏状态' }));
+
+  await waitFor(() => expect(fetchFavoriteStatusesMock).toHaveBeenCalledTimes(4));
+  expect(fetchFavoriteStatusesMock).toHaveBeenLastCalledWith(
+    pageWith12Fish.items.map((fish) => fish.slug),
+  );
+  expect(await screen.findAllByRole('button', { name: '收藏' })).toHaveLength(12);
+});
+
 test('authenticated catalog navigation opens personal favorites', async () => {
   const { user } = renderCatalog('/');
 
@@ -152,14 +200,17 @@ test('authenticated catalog navigation opens personal favorites', async () => {
 });
 
 test('anonymous catalog navigation keeps login and registration without personal links', async () => {
-  fetchCurrentUserMock.mockRejectedValue(new ApiError(401, {
+  const session = deferred<User>();
+  fetchCurrentUserMock.mockReturnValue(session.promise);
+  const unauthorized = new ApiError(401, {
     code: 'AUTHENTICATION_REQUIRED',
     message: '请先登录',
     fieldErrors: [],
     requestId: 'test-request',
-  }));
+  });
 
   renderCatalog('/');
+  session.reject(unauthorized);
 
   expect(await screen.findByRole('link', { name: '登录' })).toHaveAttribute('href', '/login');
   expect(screen.getByRole('link', { name: '注册' })).toHaveAttribute('href', '/register');
@@ -214,6 +265,41 @@ test('confirmed expired session ignores retained favorite flags and skips status
   expect(fetchFavoriteStatusesMock).not.toHaveBeenCalled();
 });
 
+test('favorite status 401 expires a fresh cached session and clears private state', async () => {
+  const unauthorized = new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED',
+    message: '请先登录',
+    fieldErrors: [],
+    requestId: 'test-request',
+  });
+  fetchCurrentUserMock.mockRejectedValue(unauthorized);
+  fetchFavoriteStatusesMock.mockRejectedValue(unauthorized);
+  const statusKey = favoriteStatusQueryKey(
+    pageWith12Fish.items.map((fish) => fish.slug),
+  );
+  const { queryClient } = renderCatalog(
+    '/',
+    false,
+    authenticatedUser,
+    Date.now(),
+    (client) => client.setQueryData(
+      statusKey,
+      { items: [{ fishSlug: 'channa-argus', favorited: true }] },
+      { updatedAt: 1 },
+    ),
+  );
+
+  expect(await screen.findByRole('link', { name: '登录' })).toBeInTheDocument();
+  expect(fetchFavoriteStatusesMock).toHaveBeenCalledTimes(1);
+  expect(fetchCurrentUserMock).toHaveBeenCalledTimes(1);
+  expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toBeUndefined();
+  expect(
+    queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY })
+      .every(([, data]) => data === undefined),
+  ).toBe(true);
+  expect(screen.queryByRole('button', { name: '取消收藏' })).not.toBeInTheDocument();
+});
+
 test('does not flash guest navigation while the session lookup is pending', () => {
   fetchCurrentUserMock.mockImplementation(() => new Promise(() => undefined));
 
@@ -239,20 +325,17 @@ test('does not present guest navigation after a transient session lookup error',
 });
 
 test('does not retry an unauthorized favorite status request', async () => {
-  fetchFavoriteStatusesMock.mockRejectedValue(new ApiError(401, {
+  const unauthorized = new ApiError(401, {
     code: 'AUTHENTICATION_REQUIRED',
     message: '请先登录',
     fieldErrors: [],
     requestId: 'test-request',
-  }));
-  const { queryClient } = renderCatalog('/', 2);
-  const statusQueryKey = favoriteStatusQueryKey(
-    pageWith12Fish.items.map((fish) => fish.slug),
-  );
-
-  await waitFor(() => {
-    expect(queryClient.getQueryState(statusQueryKey)?.status).toBe('error');
   });
+  fetchCurrentUserMock.mockRejectedValue(unauthorized);
+  fetchFavoriteStatusesMock.mockRejectedValue(unauthorized);
+  renderCatalog('/', 2, authenticatedUser, Date.now());
+
+  expect(await screen.findByRole('link', { name: '登录' })).toBeInTheDocument();
   expect(fetchFavoriteStatusesMock).toHaveBeenCalledTimes(1);
 });
 

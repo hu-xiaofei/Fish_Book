@@ -8,6 +8,8 @@ import {
   isConfirmedUnauthorized,
 } from '../../auth/api/currentUser';
 import { SessionNav } from '../../auth/components/SessionNav';
+import { useConfirmedUnauthorizedSession } from '../../auth/hooks/useConfirmedUnauthorizedSession';
+import { useFavoriteSessionExpiry } from '../../auth/hooks/useExpireSessionOnUnauthorized';
 import {
   favoriteStatusQueryKey,
   favoriteStatusQueryRetry,
@@ -41,11 +43,13 @@ export function FishCatalogPage() {
     queryKey: fishListQueryKey(filters),
     queryFn: () => fetchFishPage(filters),
   });
+  const { sessionExpired, expireIfUnauthorized } = useFavoriteSessionExpiry();
   const currentUser = useQuery({
     ...currentUserQueryConfig,
     queryFn: fetchCurrentUser,
   });
-  const hasAuthenticatedSession = hasUsableCurrentUser(
+  const currentUserUnauthorized = useConfirmedUnauthorizedSession(currentUser.error);
+  const hasAuthenticatedSession = !sessionExpired && hasUsableCurrentUser(
     currentUser.data,
     currentUser.error,
   );
@@ -56,6 +60,9 @@ export function FishCatalogPage() {
     enabled: Boolean(hasAuthenticatedSession && fishQuery.data && visibleFishSlugs.length > 0),
     retry: favoriteStatusQueryRetry,
   });
+  useEffect(() => {
+    expireIfUnauthorized(favoriteStatuses.error);
+  }, [expireIfUnauthorized, favoriteStatuses.error]);
   const filterQuery = useQuery({
     queryKey: fishFilterOptionsQueryKey,
     queryFn: fetchFishFilterOptions,
@@ -63,11 +70,14 @@ export function FishCatalogPage() {
   const options = filterQuery.data ?? { families: [], habitats: [] };
   const from = `${location.pathname}${location.search}`;
   const favoriteBySlug = new Map(
-    hasAuthenticatedSession
+    hasAuthenticatedSession && favoriteStatuses.isSuccess
       ? favoriteStatuses.data?.items.map((status) => [status.fishSlug, status.favorited])
       : [],
   );
-  const isConfirmedAnonymous = isConfirmedUnauthorized(currentUser.error);
+  const isConfirmedAnonymous = sessionExpired || currentUserUnauthorized;
+  const favoriteStatusError = hasAuthenticatedSession
+    && favoriteStatuses.isError
+    && !isConfirmedUnauthorized(favoriteStatuses.error);
 
   const updateFilters = (update: (current: CatalogFiltersValue) => CatalogFiltersValue) => {
     const next = update(latestFilters.current);
@@ -127,6 +137,22 @@ export function FishCatalogPage() {
           <h2>没有找到匹配的鱼类</h2>
         </section>
       ) : null}
+      {hasAuthenticatedSession && favoriteStatuses.isPending ? (
+        <p role="status" aria-label="正在加载收藏状态">正在加载收藏状态…</p>
+      ) : null}
+      {favoriteStatusError ? (
+        <section className={styles.message} aria-label="收藏状态错误">
+          <p role="status" aria-label="收藏状态加载失败">
+            加载收藏状态失败，请稍后重试
+          </p>
+          <button
+            type="button"
+            onClick={() => { void favoriteStatuses.refetch(); }}
+          >
+            重试收藏状态
+          </button>
+        </section>
+      ) : null}
       {fishQuery.data && fishQuery.data.items.length > 0 ? (
         <>
           <section className={styles.cardGrid} aria-label="鱼类图鉴">
@@ -135,7 +161,9 @@ export function FishCatalogPage() {
                 key={fish.slug}
                 fish={fish}
                 from={from}
-                isFavorited={favoriteBySlug.get(fish.slug) ?? false}
+                isFavorited={isConfirmedAnonymous
+                  ? false
+                  : favoriteBySlug.get(fish.slug)}
               />
             ))}
           </section>

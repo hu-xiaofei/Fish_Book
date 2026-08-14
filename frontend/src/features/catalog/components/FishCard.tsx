@@ -6,7 +6,7 @@ import type { FishSummary } from '../model/types';
 type FishCardProps = {
   fish: FishSummary;
   from: string;
-  isFavorited: boolean;
+  isFavorited?: boolean;
 };
 
 export function FishCard({ fish, from, isFavorited }: FishCardProps) {
@@ -25,11 +25,13 @@ export function FishCard({ fish, from, isFavorited }: FishCardProps) {
         <p>{fish.familyNameZh}</p>
         {fish.aliases.length > 0 ? <p>别名：{fish.aliases.join('、')}</p> : null}
         {fish.habitats.length > 0 ? <p>栖息环境：{fish.habitats.map((item) => item.labelZh).join('、')}</p> : null}
-        <FavoriteButton
-          fishSlug={fish.slug}
-          isFavorited={isFavorited}
-          returnTo={from}
-        />
+        {isFavorited === undefined ? null : (
+          <FavoriteButton
+            fishSlug={fish.slug}
+            isFavorited={isFavorited}
+            returnTo={from}
+          />
+        )}
         <Link to={`/fish/${encodeURIComponent(fish.slug)}`} state={{ from }}>查看{fish.commonNameZh}详情</Link>
       </div>
     </article>

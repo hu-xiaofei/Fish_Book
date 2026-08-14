@@ -165,6 +165,27 @@ test('confirmed expired cached session redirects instead of mutating', async () 
   expect(removeFavoriteMock).not.toHaveBeenCalled();
 });
 
+test('favorite mutation 401 clears fresh session state and routes to safe login', async () => {
+  const unauthorized = new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED',
+    message: '请先登录',
+    fieldErrors: [],
+    requestId: 'test-request',
+  });
+  addFavoriteMock.mockRejectedValue(unauthorized);
+  fetchCurrentUserMock.mockRejectedValue(unauthorized);
+  const { queryClient, user } = renderButton();
+
+  await user.click(screen.getByRole('button', { name: '收藏' }));
+
+  await waitFor(() => expect(addFavoriteMock).toHaveBeenCalledTimes(1));
+  expect(screen.getByTestId('location')).toHaveTextContent(
+    '/login?returnTo=%2Ffish%2Fchanna-argus%3Fview%3Ddetail',
+  );
+  expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toBeUndefined();
+  expect(queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY })).toEqual([]);
+});
+
 test('retained user remains usable after a transient non-authentication error', async () => {
   fetchCurrentUserMock.mockRejectedValue(new ApiError(500, {
     code: 'INTERNAL_ERROR',

@@ -9,7 +9,10 @@ import type { User } from '../../../shared/api/types';
 import { deferred } from '../../../test/renderWithProviders';
 import { CURRENT_USER_QUERY_KEY } from '../../auth/api/currentUser';
 import { ProtectedRoute } from '../../auth/components/ProtectedRoute';
-import { favoritePageQueryKey } from '../api/favoritesApi';
+import {
+  FAVORITES_QUERY_KEY,
+  favoritePageQueryKey,
+} from '../api/favoritesApi';
 import type { FavoritePage } from '../model/types';
 import { FavoritesPage } from './FavoritesPage';
 
@@ -68,12 +71,14 @@ function renderFavorites({
   protectedRoute = false,
   queryRetry = false,
   cachedUser,
+  cachedUserUpdatedAt = 1,
   cachedFavoritePage,
 }: {
   initialEntry?: string;
   protectedRoute?: boolean;
   queryRetry?: boolean | number;
   cachedUser?: User;
+  cachedUserUpdatedAt?: number;
   cachedFavoritePage?: FavoritePage;
 } = {}) {
   const queryClient = new QueryClient({
@@ -86,7 +91,11 @@ function renderFavorites({
     queryClient.setQueryData(CURRENT_USER_QUERY_KEY, authenticatedUser);
   }
   if (cachedUser) {
-    queryClient.setQueryData(CURRENT_USER_QUERY_KEY, cachedUser, { updatedAt: 1 });
+    queryClient.setQueryData(
+      CURRENT_USER_QUERY_KEY,
+      cachedUser,
+      { updatedAt: cachedUserUpdatedAt },
+    );
   }
   if (cachedFavoritePage) {
     queryClient.setQueryData(
@@ -205,7 +214,7 @@ test('does not retry an unauthorized favorites page request', async () => {
 
   renderFavorites({ queryRetry: 2 });
 
-  expect(await screen.findByText('加载收藏失败，请稍后重试')).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '登录' })).toBeInTheDocument();
   expect(fetchFavoritePageMock).toHaveBeenCalledTimes(1);
 });
 
@@ -310,5 +319,32 @@ test('the protected page hides retained favorites after a cached session expires
   }));
 
   expect(await screen.findByRole('heading', { name: '登录' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '乌鳢' })).not.toBeInTheDocument();
+});
+
+test('favorites page 401 expires a fresh session and redirects without private cache', async () => {
+  const unauthorized = new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED',
+    message: '请先登录',
+    fieldErrors: [],
+    requestId: 'test-request',
+  });
+  fetchCurrentUserMock.mockRejectedValue(unauthorized);
+  fetchFavoritePageMock.mockRejectedValue(unauthorized);
+  const { queryClient } = renderFavorites({
+    protectedRoute: true,
+    cachedUser: authenticatedUser,
+    cachedUserUpdatedAt: Date.now(),
+    cachedFavoritePage: populatedPage,
+  });
+
+  expect(await screen.findByRole('heading', { name: '登录' })).toBeInTheDocument();
+  expect(fetchFavoritePageMock).toHaveBeenCalledTimes(1);
+  expect(fetchCurrentUserMock).toHaveBeenCalledTimes(1);
+  expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toBeUndefined();
+  expect(
+    queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY })
+      .every(([, data]) => data === undefined),
+  ).toBe(true);
   expect(screen.queryByRole('heading', { name: '乌鳢' })).not.toBeInTheDocument();
 });

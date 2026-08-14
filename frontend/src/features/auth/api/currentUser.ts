@@ -18,6 +18,9 @@ export function hasUsableCurrentUser(
 export const currentUserQueryConfig = {
   queryKey: CURRENT_USER_QUERY_KEY,
   staleTime: 5 * 60 * 1000,
+  refetchOnMount: (query: { state: { error: unknown } }) => (
+    !isConfirmedUnauthorized(query.state.error)
+  ),
   retry: (failureCount: number, error: Error) => {
     if (isConfirmedUnauthorized(error)) return false;
     return failureCount < 2;
