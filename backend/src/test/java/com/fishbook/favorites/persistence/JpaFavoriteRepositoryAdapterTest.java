@@ -1,18 +1,28 @@
 package com.fishbook.favorites.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import com.fishbook.favorites.domain.FavoriteEntry;
 import com.fishbook.favorites.domain.FavoritePage;
 import com.fishbook.support.MySqlTestConfiguration;
 import java.time.Instant;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.TimeUnit;
 import java.util.Set;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @DataJpaTest
 @Import({MySqlTestConfiguration.class, JpaFavoriteRepositoryAdapter.class})
@@ -57,6 +67,31 @@ class JpaFavoriteRepositoryAdapterTest {
         adapter.remove(USER_ID, 1L);
 
         assertThat(adapter.findByUserId(USER_ID, 0, 10).items()).isEmpty();
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void concurrentRemovesAreBothIdempotent() throws Exception {
+        adapter.add(USER_ID, 1L, Instant.parse("2026-08-14T00:00:00Z"));
+
+        try (ExecutorService executor = Executors.newFixedThreadPool(8)) {
+            CyclicBarrier readyToRemove = new CyclicBarrier(8);
+            List<Future<Object>> removals = IntStream.range(0, 8)
+                    .mapToObj(ignored -> executor.submit(() -> {
+                        readyToRemove.await(10, TimeUnit.SECONDS);
+                        adapter.remove(USER_ID, 1L);
+                        return null;
+                    }))
+                    .toList();
+
+            for (Future<?> removal : removals) {
+                assertThatCode(() -> removal.get(10, TimeUnit.SECONDS)).doesNotThrowAnyException();
+            }
+        }
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM favorites WHERE user_id = ? AND fish_species_id = ?",
+                Integer.class, USER_ID, 1L)).isZero();
     }
 
     @Test

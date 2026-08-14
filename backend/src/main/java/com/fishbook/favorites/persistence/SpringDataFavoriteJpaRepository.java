@@ -15,7 +15,10 @@ interface SpringDataFavoriteJpaRepository extends JpaRepository<FavoriteJpaEntit
             + "VALUES (:userId, :fishId, :createdAt)", nativeQuery = true)
     int insertIfAbsent(long userId, long fishId, Instant createdAt);
 
-    void deleteByUserIdAndFishSpeciesId(long userId, long fishSpeciesId);
+    @Modifying
+    @Query(value = "DELETE FROM favorites WHERE user_id = :userId AND fish_species_id = :fishId",
+            nativeQuery = true)
+    int deleteIfPresent(long userId, long fishId);
 
     Page<FavoriteJpaEntity> findByUserId(long userId, Pageable pageable);
 
