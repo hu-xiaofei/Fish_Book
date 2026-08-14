@@ -8,7 +8,7 @@
 
 ### 项目简介
 
-FishBook 是一个面向中国淡水鱼知识学习的全栈鱼类图鉴项目，也是一套用于练习真实软件工程流程的学习型应用。项目目前提供公开只读鱼类图鉴和完整的用户身份闭环，并通过同源部署将 React 前端与 Spring Boot API 统一运行在一个地址下。
+FishBook 是一个面向中国淡水鱼知识学习的全栈鱼类图鉴项目，也是一套用于练习真实软件工程流程的学习型应用。项目目前提供公开只读鱼类图鉴、完整的用户身份闭环和登录用户私有收藏，并通过同源部署将 React 前端与 Spring Boot API 统一运行在一个地址下。
 
 当前版本收录 12 种经过整理的常见淡水鱼：鲫、鲤、草鱼、青鱼、鲢、鳙、乌鳢、鳜、黄颡鱼、团头鲂、翘嘴鲌和泥鳅。鱼类图片均保存在项目中，并记录来源、作者和许可证信息。
 
@@ -32,7 +32,13 @@ FishBook 是一个面向中国淡水鱼知识学习的全栈鱼类图鉴项目�
 - 使用 CSRF 防护、会话固定攻击防护和 HttpOnly 会话 Cookie。
 - 使用 BCrypt-SHA256 对密码进行安全哈希。
 
-图鉴目前保持公开只读。管理员后台、图鉴新增与编辑、图片上传、收藏和钓获记录尚未实现，属于后续开发范围。
+**个人收藏**
+
+- 登录用户可以从图鉴卡片或鱼类详情收藏、取消收藏鱼类。
+- “我的收藏”页面按用户隔离展示私有收藏，并支持分页和持久化取消收藏。
+- 重复收藏和重复取消收藏均采用幂等处理，不会产生重复数据。
+
+图鉴内容目前保持公开只读。管理员后台、图鉴新增与编辑、图片上传和钓获记录尚未实现，属于后续开发范围。
 
 ### 技术栈
 
@@ -100,6 +106,7 @@ docker compose -f compose.yaml -f compose.full.yaml down
 | 注册 | [http://localhost:8080/register](http://localhost:8080/register) |
 | 登录 | [http://localhost:8080/login](http://localhost:8080/login) |
 | 个人资料 | [http://localhost:8080/profile](http://localhost:8080/profile) |
+| 我的收藏 | [http://localhost:8080/favorites](http://localhost:8080/favorites) |
 | 健康检查 | [http://localhost:8080/actuator/health](http://localhost:8080/actuator/health) |
 
 ### 测试与验证
@@ -114,7 +121,7 @@ cd .. && docker compose --env-file .env.example -f compose.yaml -f compose.full.
 ```
 
 - 后端测试使用 Testcontainers 启动真实 MySQL，因此需要 Docker 正在运行。
-- Playwright 测试需要先通过完整 Docker Compose 命令启动应用。
+- Playwright 测试需要先通过完整 Docker Compose 命令启动应用，并覆盖身份、公开图鉴和私有收藏主流程。
 - 以上是与 CI 覆盖范围一致的本地验证流程。GitHub Actions 会在推送到 `main` 和 Pull Request 时执行后端、前端、Docker 与端到端测试；Linux CI 还会使用 Maven 批处理模式、安装 Playwright 系统依赖，并在端到端测试前启动和等待完整服务栈。
 
 ### 项目结构
@@ -131,12 +138,12 @@ Fish_Book/
 
 ### 当前范围与后续方向
 
-当前交付重点是稳定的身份系统和公开只读图鉴。下一阶段可以继续开发：
+当前交付已包含稳定的身份系统、公开只读图鉴和登录用户私有收藏。下一阶段可以继续开发：
 
 - 管理员账号初始化和基于角色的权限控制；
 - 鱼类新增、编辑、发布和下架；
 - 图片上传与 MinIO 对象存储；
-- 收藏、钓获记录和个人学习功能。
+- 钓获记录和更多个人学习功能。
 
 仓库目前没有项目级应用许可证文件，因此不要据此推断应用代码的开源授权。鱼类图片使用各自的开放许可证，详情见图片来源记录。
 
@@ -155,7 +162,7 @@ Fish_Book/
 
 ### Overview
 
-FishBook is a learning-oriented full-stack fish encyclopedia focused on Chinese freshwater fish and on practicing a realistic software engineering workflow. The current application provides a public read-only fish catalog and a complete identity flow, with the React frontend and Spring Boot API served from the same origin.
+FishBook is a learning-oriented full-stack fish encyclopedia focused on Chinese freshwater fish and on practicing a realistic software engineering workflow. The current application provides a public read-only fish catalog, a complete identity flow, and private favorites for authenticated users, with the React frontend and Spring Boot API served from the same origin.
 
 The catalog currently contains 12 curated freshwater species: crucian carp, common carp, grass carp, black carp, silver carp, bighead carp, northern snakehead, mandarin fish, yellow catfish, Wuchang bream, topmouth culter, and weather loach. Every catalog image is stored locally with recorded source, author, and license metadata.
 
@@ -179,7 +186,13 @@ The catalog currently contains 12 curated freshwater species: crucian carp, comm
 - Protect requests with CSRF defense, session-fixation protection, and HttpOnly session cookies.
 - Hash passwords with BCrypt-SHA256.
 
-The catalog remains read-only. The admin management UI, catalog writes, image uploads, favorites, and catch records are not implemented yet and remain future work.
+**Personal favorites**
+
+- Authenticated users can add or remove favorites from catalog cards and fish details.
+- The “My Favorites” page keeps each user's favorites private and supports pagination and persistent removal.
+- Repeated add and remove requests are idempotent and do not create duplicate data.
+
+Catalog content remains read-only. The admin management UI, catalog writes, image uploads, and catch records are not implemented yet and remain future work.
 
 ### Tech Stack
 
@@ -247,6 +260,7 @@ docker compose -f compose.yaml -f compose.full.yaml down
 | Registration | [http://localhost:8080/register](http://localhost:8080/register) |
 | Login | [http://localhost:8080/login](http://localhost:8080/login) |
 | Profile | [http://localhost:8080/profile](http://localhost:8080/profile) |
+| My Favorites | [http://localhost:8080/favorites](http://localhost:8080/favorites) |
 | Health endpoint | [http://localhost:8080/actuator/health](http://localhost:8080/actuator/health) |
 
 ### Tests and Verification
@@ -261,7 +275,7 @@ cd .. && docker compose --env-file .env.example -f compose.yaml -f compose.full.
 ```
 
 - Backend tests use Testcontainers with a real MySQL instance, so Docker must be running.
-- Playwright requires the full application stack to be running first.
+- Playwright requires the full application stack to be running first and covers the identity, public-catalog, and private-favorites flows.
 - The commands above are the local equivalent of the CI verification scope. GitHub Actions runs backend, frontend, Docker, and end-to-end checks for pushes to `main` and for pull requests; Linux CI additionally uses Maven batch mode, installs Playwright system dependencies, and starts and waits for the full stack before the end-to-end tests.
 
 ### Project Structure
@@ -278,12 +292,12 @@ Fish_Book/
 
 ### Current Scope and Next Steps
 
-The current delivery focuses on a stable identity system and public read-only catalog. Natural next steps include:
+The current delivery includes a stable identity system, a public read-only catalog, and private favorites for authenticated users. Natural next steps include:
 
 - administrator bootstrap and role-based authorization;
 - create, edit, publish, and unpublish catalog workflows;
 - image uploads backed by MinIO object storage;
-- favorites, catch records, and personal learning features.
+- catch records and additional personal learning features.
 
 The repository does not currently contain a project-level application license file, so no open-source license should be inferred for the application code. Fish images retain their individual open licenses; see the attribution record for details.
 
