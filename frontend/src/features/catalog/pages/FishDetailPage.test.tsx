@@ -4,12 +4,25 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
+import type { User } from '../../../shared/api/types';
 import type { FishDetail } from '../model/types';
 import { FishDetailPage } from './FishDetailPage';
 
-const { fetchFishDetailMock } = vi.hoisted(() => ({
+const { fetchCurrentUserMock, fetchFavoriteStatusesMock, fetchFishDetailMock } = vi.hoisted(() => ({
+  fetchCurrentUserMock: vi.fn(),
+  fetchFavoriteStatusesMock: vi.fn(),
   fetchFishDetailMock: vi.fn(),
 }));
+
+vi.mock('../../auth/api/currentUser', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../auth/api/currentUser')>();
+  return { ...actual, fetchCurrentUser: fetchCurrentUserMock };
+});
+
+vi.mock('../../favorites/api/favoritesApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../favorites/api/favoritesApi')>();
+  return { ...actual, fetchFavoriteStatuses: fetchFavoriteStatusesMock };
+});
 
 vi.mock('../api/catalogApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/catalogApi')>();
@@ -47,6 +60,13 @@ const channaArgusDetail: FishDetail = {
   },
 };
 
+const authenticatedUser: User = {
+  id: 1,
+  email: 'angler@example.com',
+  nickname: 'River',
+  role: 'USER',
+};
+
 function renderDetail(
   initialEntry: string | { pathname: string; state?: { from: string } },
 ) {
@@ -66,8 +86,22 @@ function renderDetail(
 }
 
 beforeEach(() => {
+  fetchCurrentUserMock.mockReset();
+  fetchFavoriteStatusesMock.mockReset();
   fetchFishDetailMock.mockReset();
+  fetchCurrentUserMock.mockResolvedValue(authenticatedUser);
+  fetchFavoriteStatusesMock.mockResolvedValue({
+    items: [{ fishSlug: 'channa-argus', favorited: false }],
+  });
   fetchFishDetailMock.mockResolvedValue(channaArgusDetail);
+});
+
+test('loads the favorite status once for the detail fish', async () => {
+  renderDetail('/fish/channa-argus');
+
+  expect(await screen.findByRole('heading', { name: '乌鳢' })).toBeInTheDocument();
+  await waitFor(() => expect(fetchFavoriteStatusesMock).toHaveBeenCalledTimes(1));
+  expect(fetchFavoriteStatusesMock).toHaveBeenCalledWith(['channa-argus']);
 });
 
 test('renders classification, content, and visible image attribution', async () => {

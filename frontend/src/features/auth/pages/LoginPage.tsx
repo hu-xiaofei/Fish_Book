@@ -25,6 +25,10 @@ export function LoginPage() {
   const queryClient = useQueryClient();
   const [serverError, setServerError] = useState<string>();
   const registrationMessage = (location.state as { message?: string } | null)?.message;
+  const returnTo = new URLSearchParams(location.search).get('returnTo');
+  const safeReturnTo = returnTo?.startsWith('/') && !returnTo.startsWith('//')
+    ? returnTo
+    : '/profile';
   const {
     register,
     handleSubmit,
@@ -39,7 +43,7 @@ export function LoginPage() {
     try {
       const user = await login(input);
       queryClient.setQueryData(CURRENT_USER_QUERY_KEY, user);
-      navigate('/profile', { replace: true });
+      navigate(safeReturnTo, { replace: true });
     } catch (error) {
       if (
         error instanceof ApiError

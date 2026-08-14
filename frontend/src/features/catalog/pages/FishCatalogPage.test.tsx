@@ -3,13 +3,26 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
+import type { User } from '../../../shared/api/types';
 import type { FishFilterOptions, FishPage, FishSummary } from '../model/types';
 import { FishCatalogPage } from './FishCatalogPage';
 
-const { fetchFishFiltersMock, fetchFishPageMock } = vi.hoisted(() => ({
+const { fetchCurrentUserMock, fetchFavoriteStatusesMock, fetchFishFiltersMock, fetchFishPageMock } = vi.hoisted(() => ({
+  fetchCurrentUserMock: vi.fn(),
+  fetchFavoriteStatusesMock: vi.fn(),
   fetchFishFiltersMock: vi.fn(),
   fetchFishPageMock: vi.fn(),
 }));
+
+vi.mock('../../auth/api/currentUser', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../auth/api/currentUser')>();
+  return { ...actual, fetchCurrentUser: fetchCurrentUserMock };
+});
+
+vi.mock('../../favorites/api/favoritesApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../favorites/api/favoritesApi')>();
+  return { ...actual, fetchFavoriteStatuses: fetchFavoriteStatusesMock };
+});
 
 vi.mock('../api/catalogApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/catalogApi')>();
@@ -54,6 +67,13 @@ const filterOptions: FishFilterOptions = {
   ],
 };
 
+const authenticatedUser: User = {
+  id: 1,
+  email: 'angler@example.com',
+  nickname: 'River',
+  role: 'USER',
+};
+
 function LocationProbe() {
   const location = useLocation();
   return <output data-testid="location">{location.pathname}{location.search}</output>;
@@ -83,10 +103,26 @@ function renderCatalog(initialEntry: string) {
 }
 
 beforeEach(() => {
+  fetchCurrentUserMock.mockReset();
+  fetchFavoriteStatusesMock.mockReset();
   fetchFishPageMock.mockReset();
   fetchFishFiltersMock.mockReset();
+  fetchCurrentUserMock.mockResolvedValue(authenticatedUser);
+  fetchFavoriteStatusesMock.mockResolvedValue({
+    items: pageWith12Fish.items.map((fish) => ({ fishSlug: fish.slug, favorited: false })),
+  });
   fetchFishPageMock.mockResolvedValue(pageWith12Fish);
   fetchFishFiltersMock.mockResolvedValue(filterOptions);
+});
+
+test('loads favorite statuses for all 12 visible fish in one batch request', async () => {
+  renderCatalog('/');
+
+  expect(await screen.findByRole('link', { name: /查看乌鳢详情/ })).toBeInTheDocument();
+  await waitFor(() => expect(fetchFavoriteStatusesMock).toHaveBeenCalledTimes(1));
+  expect(fetchFavoriteStatusesMock).toHaveBeenCalledWith(
+    pageWith12Fish.items.map((fish) => fish.slug),
+  );
 });
 
 test('renders cards and hides pagination for one page', async () => {

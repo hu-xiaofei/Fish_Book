@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { PropsWithChildren } from 'react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
@@ -17,7 +17,12 @@ vi.mock('../api/authApi', async (importOriginal) => {
   return { ...actual, login: loginMock };
 });
 
-function renderLoginPage() {
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname}{location.search}</output>;
+}
+
+function renderLoginPage(initialEntry = '/login') {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -28,7 +33,7 @@ function renderLoginPage() {
   function Wrapper({ children }: PropsWithChildren) {
     return (
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/login']}>{children}</MemoryRouter>
+        <MemoryRouter initialEntries={[initialEntry]}>{children}</MemoryRouter>
       </QueryClientProvider>
     );
   }
@@ -40,6 +45,7 @@ function renderLoginPage() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/profile" element={<h1>个人资料</h1>} />
+        <Route path="/fish/:slug" element={<><h1>鱼类详情</h1><LocationProbe /></>} />
       </Routes>,
       { wrapper: Wrapper },
     ),
@@ -72,6 +78,41 @@ test('successful login caches the user without browser storage', async () => {
   expect(queryClient.getQueryData(['current-user'])).toMatchObject({ id: 1 });
   expect(storageSpy).not.toHaveBeenCalled();
   storageSpy.mockRestore();
+});
+
+test('successful login returns to a same-origin path from the query string', async () => {
+  loginMock.mockResolvedValue({
+    id: 1,
+    email: 'angler@example.com',
+    nickname: 'Wall_E',
+    role: 'USER',
+  } satisfies User);
+  const { user } = renderLoginPage(
+    '/login?returnTo=%2Ffish%2Fchanna-argus%3Fview%3Ddetail',
+  );
+
+  await fillLoginForm(user);
+  await user.click(screen.getByRole('button', { name: '登录' }));
+
+  expect(await screen.findByRole('heading', { name: '鱼类详情' })).toBeInTheDocument();
+  expect(screen.getByTestId('location')).toHaveTextContent(
+    '/fish/channa-argus?view=detail',
+  );
+});
+
+test('successful login rejects a protocol-relative return target', async () => {
+  loginMock.mockResolvedValue({
+    id: 1,
+    email: 'angler@example.com',
+    nickname: 'Wall_E',
+    role: 'USER',
+  } satisfies User);
+  const { user } = renderLoginPage('/login?returnTo=%2F%2Fevil.example');
+
+  await fillLoginForm(user);
+  await user.click(screen.getByRole('button', { name: '登录' }));
+
+  expect(await screen.findByText('个人资料')).toBeInTheDocument();
 });
 
 test('invalid credentials show the server message', async () => {

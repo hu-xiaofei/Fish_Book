@@ -2,6 +2,15 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { ApiError } from '../../../shared/api/ApiError';
+import {
+  currentUserQueryConfig,
+  fetchCurrentUser,
+} from '../../auth/api/currentUser';
+import {
+  favoriteStatusQueryKey,
+  fetchFavoriteStatuses,
+} from '../../favorites/api/favoritesApi';
+import { FavoriteButton } from '../../favorites/components/FavoriteButton';
 import { fetchFishDetail, fishDetailQueryKey } from '../api/catalogApi';
 import styles from './FishDetailPage.module.css';
 
@@ -29,6 +38,15 @@ export function FishDetailPage() {
     queryKey: fishDetailQueryKey(slug ?? ''),
     queryFn: () => fetchFishDetail(slug ?? ''),
     enabled: Boolean(slug),
+  });
+  const currentUser = useQuery({
+    ...currentUserQueryConfig,
+    queryFn: fetchCurrentUser,
+  });
+  const favoriteStatuses = useQuery({
+    queryKey: favoriteStatusQueryKey(slug ? [slug] : []),
+    queryFn: () => fetchFavoriteStatuses(slug ? [slug] : []),
+    enabled: Boolean(currentUser.data && detail.data && slug),
   });
   const returnPath = catalogReturnPath(location.state);
   const isMissingFish = detail.error instanceof ApiError
@@ -69,6 +87,10 @@ export function FishDetailPage() {
   const fish = detail.data;
   const sourceUrl = safeExternalUrl(fish.image.sourceUrl);
   const licenseUrl = safeExternalUrl(fish.image.licenseUrl);
+  const isFavorited = favoriteStatuses.data?.items.find(
+    (status) => status.fishSlug === fish.slug,
+  )?.favorited ?? false;
+  const currentPath = `${location.pathname}${location.search}`;
 
   return (
     <main className={styles.page}>
@@ -79,6 +101,11 @@ export function FishDetailPage() {
         <header className={styles.header}>
           <h1>{fish.commonNameZh}</h1>
           <p><i>{fish.scientificName}</i></p>
+          <FavoriteButton
+            fishSlug={fish.slug}
+            isFavorited={isFavorited}
+            returnTo={currentPath}
+          />
         </header>
 
         <div className={styles.layout}>

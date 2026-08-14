@@ -2,6 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import {
+  currentUserQueryConfig,
+  fetchCurrentUser,
+} from '../../auth/api/currentUser';
+import {
+  favoriteStatusQueryKey,
+  fetchFavoriteStatuses,
+} from '../../favorites/api/favoritesApi';
+import {
   fetchFishFilterOptions,
   fetchFishPage,
   fishFilterOptionsQueryKey,
@@ -29,12 +37,25 @@ export function FishCatalogPage() {
     queryKey: fishListQueryKey(filters),
     queryFn: () => fetchFishPage(filters),
   });
+  const currentUser = useQuery({
+    ...currentUserQueryConfig,
+    queryFn: fetchCurrentUser,
+  });
+  const visibleFishSlugs = fishQuery.data?.items.map((fish) => fish.slug) ?? [];
+  const favoriteStatuses = useQuery({
+    queryKey: favoriteStatusQueryKey(visibleFishSlugs),
+    queryFn: () => fetchFavoriteStatuses(visibleFishSlugs),
+    enabled: Boolean(currentUser.data && fishQuery.data && visibleFishSlugs.length > 0),
+  });
   const filterQuery = useQuery({
     queryKey: fishFilterOptionsQueryKey,
     queryFn: fetchFishFilterOptions,
   });
   const options = filterQuery.data ?? { families: [], habitats: [] };
   const from = `${location.pathname}${location.search}`;
+  const favoriteBySlug = new Map(
+    favoriteStatuses.data?.items.map((status) => [status.fishSlug, status.favorited]),
+  );
 
   const updateFilters = (update: (current: CatalogFiltersValue) => CatalogFiltersValue) => {
     const next = update(latestFilters.current);
@@ -91,7 +112,14 @@ export function FishCatalogPage() {
       {fishQuery.data && fishQuery.data.items.length > 0 ? (
         <>
           <section className={styles.cardGrid} aria-label="鱼类图鉴">
-            {fishQuery.data.items.map((fish) => <FishCard key={fish.slug} fish={fish} from={from} />)}
+            {fishQuery.data.items.map((fish) => (
+              <FishCard
+                key={fish.slug}
+                fish={fish}
+                from={from}
+                isFavorited={favoriteBySlug.get(fish.slug) ?? false}
+              />
+            ))}
           </section>
           <div className={styles.pagination}>
             <CatalogPagination
