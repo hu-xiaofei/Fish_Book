@@ -228,6 +228,40 @@ test('removing a favorite refreshes the personal page through broad invalidation
   await waitFor(() => expect(fetchFavoritePageMock).toHaveBeenCalledTimes(2));
 });
 
+test('returns to the last valid page after removing its final favorite', async () => {
+  const lastPage = {
+    ...populatedPage,
+    page: 1,
+    totalItems: 13,
+    totalPages: 2,
+  };
+  const nowOutOfRange = {
+    ...populatedPage,
+    items: [],
+    page: 1,
+    totalItems: 12,
+    totalPages: 1,
+  };
+  const validFirstPage = {
+    ...populatedPage,
+    page: 0,
+    totalItems: 12,
+    totalPages: 1,
+  };
+  fetchFavoritePageMock
+    .mockResolvedValueOnce(lastPage)
+    .mockResolvedValueOnce(nowOutOfRange)
+    .mockResolvedValueOnce(validFirstPage);
+  const { user } = renderFavorites({ initialEntry: '/favorites?page=1' });
+
+  await user.click(await screen.findByRole('button', { name: '取消收藏' }));
+
+  await waitFor(() => expect(fetchFavoritePageMock).toHaveBeenLastCalledWith(0));
+  expect(screen.getByTestId('location')).toHaveTextContent('/favorites');
+  expect(screen.queryByRole('heading', { name: '还没有收藏鱼类' })).not.toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '乌鳢' })).toBeInTheDocument();
+});
+
 test('the protected page redirects an anonymous session before loading favorites', async () => {
   fetchCurrentUserMock.mockRejectedValue(new ApiError(401, {
     code: 'AUTHENTICATION_REQUIRED',

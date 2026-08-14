@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { SessionNav } from '../../auth/components/SessionNav';
 import { FavoriteButton } from '../components/FavoriteButton';
@@ -83,6 +83,24 @@ export function FavoritesPage() {
   });
   const returnTo = `${location.pathname}${location.search}`;
 
+  useEffect(() => {
+    const result = favoritesQuery.data;
+    if (
+      !result
+      || result.items.length > 0
+      || result.totalItems === 0
+      || page < result.totalPages
+    ) {
+      return;
+    }
+
+    const lastValidPage = Math.max(result.totalPages - 1, 0);
+    setSearchParams(
+      lastValidPage === 0 ? {} : { page: String(lastValidPage) },
+      { replace: true },
+    );
+  }, [favoritesQuery.data, page, setSearchParams]);
+
   const changePage = (nextPage: number) => {
     if (nextPage <= 0) {
       setSearchParams({});
@@ -111,7 +129,7 @@ export function FavoritesPage() {
           <button type="button" onClick={() => { void favoritesQuery.refetch(); }}>重试</button>
         </section>
       ) : null}
-      {favoritesQuery.data && favoritesQuery.data.items.length === 0 ? (
+      {favoritesQuery.data && favoritesQuery.data.totalItems === 0 ? (
         <section className={styles.message}>
           <h2>还没有收藏鱼类</h2>
           <p>浏览鱼图鉴，收藏你感兴趣的鱼。</p>
