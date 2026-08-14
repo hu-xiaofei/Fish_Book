@@ -103,6 +103,14 @@ class FavoriteApiIntegrationTest {
     }
 
     @Test
+    void missingStatusSlugsReturnStableFavoriteQueryError() throws Exception {
+        mvc.perform(get("/api/v1/favorites/status").with(user(USER_EMAIL)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_FAVORITE_QUERY"))
+                .andExpect(jsonPath("$.requestId").isNotEmpty());
+    }
+
+    @Test
     void invalidFavoriteQueriesReturnStableError() throws Exception {
         mvc.perform(get("/api/v1/favorites").with(user(USER_EMAIL)).param("page", "-1"))
                 .andExpect(status().isBadRequest())

@@ -52,7 +52,7 @@ public class FavoriteController {
     @GetMapping("/status")
     FavoriteStatusResponse statuses(
             Authentication authentication,
-            @RequestParam("fishSlug") List<String> fishSlugs) {
+            @RequestParam(value = "fishSlug", required = false) List<String> fishSlugs) {
         return FavoriteStatusResponse.from(service.statuses(authentication.getName(), fishSlugs));
     }
 
