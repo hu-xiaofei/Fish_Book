@@ -5,6 +5,7 @@ import { ApiError } from '../../../shared/api/ApiError';
 import {
   currentUserQueryConfig,
   fetchCurrentUser,
+  hasUsableCurrentUser,
 } from '../../auth/api/currentUser';
 import {
   favoriteStatusQueryKey,
@@ -44,10 +45,14 @@ export function FishDetailPage() {
     ...currentUserQueryConfig,
     queryFn: fetchCurrentUser,
   });
+  const hasAuthenticatedSession = hasUsableCurrentUser(
+    currentUser.data,
+    currentUser.error,
+  );
   const favoriteStatuses = useQuery({
     queryKey: favoriteStatusQueryKey(slug ? [slug] : []),
     queryFn: () => fetchFavoriteStatuses(slug ? [slug] : []),
-    enabled: Boolean(currentUser.data && detail.data && slug),
+    enabled: Boolean(hasAuthenticatedSession && detail.data && slug),
     retry: favoriteStatusQueryRetry,
   });
   const returnPath = catalogReturnPath(location.state);
@@ -89,9 +94,11 @@ export function FishDetailPage() {
   const fish = detail.data;
   const sourceUrl = safeExternalUrl(fish.image.sourceUrl);
   const licenseUrl = safeExternalUrl(fish.image.licenseUrl);
-  const isFavorited = favoriteStatuses.data?.items.find(
-    (status) => status.fishSlug === fish.slug,
-  )?.favorited ?? false;
+  const isFavorited = hasAuthenticatedSession
+    ? favoriteStatuses.data?.items.find(
+      (status) => status.fishSlug === fish.slug,
+    )?.favorited ?? false
+    : false;
   const currentPath = `${location.pathname}${location.search}`;
 
   return (

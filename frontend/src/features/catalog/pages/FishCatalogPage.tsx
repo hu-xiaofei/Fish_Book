@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import { ApiError } from '../../../shared/api/ApiError';
 import {
   currentUserQueryConfig,
   fetchCurrentUser,
+  hasUsableCurrentUser,
+  isConfirmedUnauthorized,
 } from '../../auth/api/currentUser';
 import { SessionNav } from '../../auth/components/SessionNav';
 import {
@@ -44,11 +45,15 @@ export function FishCatalogPage() {
     ...currentUserQueryConfig,
     queryFn: fetchCurrentUser,
   });
+  const hasAuthenticatedSession = hasUsableCurrentUser(
+    currentUser.data,
+    currentUser.error,
+  );
   const visibleFishSlugs = fishQuery.data?.items.map((fish) => fish.slug) ?? [];
   const favoriteStatuses = useQuery({
     queryKey: favoriteStatusQueryKey(visibleFishSlugs),
     queryFn: () => fetchFavoriteStatuses(visibleFishSlugs),
-    enabled: Boolean(currentUser.data && fishQuery.data && visibleFishSlugs.length > 0),
+    enabled: Boolean(hasAuthenticatedSession && fishQuery.data && visibleFishSlugs.length > 0),
     retry: favoriteStatusQueryRetry,
   });
   const filterQuery = useQuery({
@@ -58,10 +63,11 @@ export function FishCatalogPage() {
   const options = filterQuery.data ?? { families: [], habitats: [] };
   const from = `${location.pathname}${location.search}`;
   const favoriteBySlug = new Map(
-    favoriteStatuses.data?.items.map((status) => [status.fishSlug, status.favorited]),
+    hasAuthenticatedSession
+      ? favoriteStatuses.data?.items.map((status) => [status.fishSlug, status.favorited])
+      : [],
   );
-  const isConfirmedAnonymous = currentUser.error instanceof ApiError
-    && currentUser.error.status === 401;
+  const isConfirmedAnonymous = isConfirmedUnauthorized(currentUser.error);
 
   const updateFilters = (update: (current: CatalogFiltersValue) => CatalogFiltersValue) => {
     const next = update(latestFilters.current);

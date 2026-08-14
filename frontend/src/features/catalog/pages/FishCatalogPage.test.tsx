@@ -5,6 +5,7 @@ import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
+import { deferred } from '../../../test/renderWithProviders';
 import { CURRENT_USER_QUERY_KEY } from '../../auth/api/currentUser';
 import { favoriteStatusQueryKey } from '../../favorites/api/favoritesApi';
 import type { FishFilterOptions, FishPage, FishSummary } from '../model/types';
@@ -184,6 +185,33 @@ test('expired cached session replaces personal links with usable guest navigatio
   await user.click(screen.getByRole('link', { name: '登录' }));
   expect(screen.getByRole('heading', { name: '登录页' })).toBeInTheDocument();
   expect(screen.getByTestId('location')).toHaveTextContent('/login');
+});
+
+test('confirmed expired session ignores retained favorite flags and skips status refetch', async () => {
+  const session = deferred<User>();
+  const fishPage = deferred<FishPage>();
+  fetchCurrentUserMock.mockReturnValue(session.promise);
+  fetchFishPageMock.mockReturnValue(fishPage.promise);
+  fetchFavoriteStatusesMock.mockImplementation(() => new Promise(() => undefined));
+  const { queryClient } = renderCatalog('/', false, authenticatedUser);
+  queryClient.setQueryData(
+    favoriteStatusQueryKey(pageWith12Fish.items.map((fish) => fish.slug)),
+    { items: [{ fishSlug: 'channa-argus', favorited: true }] },
+    { updatedAt: 1 },
+  );
+
+  session.reject(new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED',
+    message: '请先登录',
+    fieldErrors: [],
+    requestId: 'test-request',
+  }));
+  expect(await screen.findByRole('link', { name: '登录' })).toBeInTheDocument();
+  fishPage.resolve(pageWith12Fish);
+
+  expect(await screen.findByRole('link', { name: /查看乌鳢详情/ })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '取消收藏' })).not.toBeInTheDocument();
+  expect(fetchFavoriteStatusesMock).not.toHaveBeenCalled();
 });
 
 test('does not flash guest navigation while the session lookup is pending', () => {

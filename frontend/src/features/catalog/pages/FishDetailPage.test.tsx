@@ -5,6 +5,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
+import { deferred } from '../../../test/renderWithProviders';
+import { CURRENT_USER_QUERY_KEY } from '../../auth/api/currentUser';
 import { favoriteStatusQueryKey } from '../../favorites/api/favoritesApi';
 import type { FishDetail } from '../model/types';
 import { FishDetailPage } from './FishDetailPage';
@@ -71,10 +73,14 @@ const authenticatedUser: User = {
 function renderDetail(
   initialEntry: string | { pathname: string; state?: { from: string } },
   queryRetry: boolean | number = false,
+  cachedUser?: User,
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: queryRetry, retryDelay: 0 } },
   });
+  if (cachedUser) {
+    queryClient.setQueryData(CURRENT_USER_QUERY_KEY, cachedUser, { updatedAt: 1 });
+  }
   return {
     queryClient,
     ...render(
@@ -124,6 +130,35 @@ test('does not retry an unauthorized detail favorite status request', async () =
     ).toBe('error');
   });
   expect(fetchFavoriteStatusesMock).toHaveBeenCalledTimes(1);
+});
+
+test('confirmed expired detail session ignores retained favorite flag and skips status refetch', async () => {
+  const session = deferred<User>();
+  const fishDetail = deferred<FishDetail>();
+  fetchCurrentUserMock.mockReturnValue(session.promise);
+  fetchFishDetailMock.mockReturnValue(fishDetail.promise);
+  fetchFavoriteStatusesMock.mockImplementation(() => new Promise(() => undefined));
+  const { queryClient } = renderDetail('/fish/channa-argus', false, authenticatedUser);
+  queryClient.setQueryData(
+    favoriteStatusQueryKey(['channa-argus']),
+    { items: [{ fishSlug: 'channa-argus', favorited: true }] },
+    { updatedAt: 1 },
+  );
+
+  session.reject(new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED',
+    message: '请先登录',
+    fieldErrors: [],
+    requestId: 'test-request',
+  }));
+  await waitFor(() => {
+    expect(queryClient.getQueryState(CURRENT_USER_QUERY_KEY)?.status).toBe('error');
+  });
+  fishDetail.resolve(channaArgusDetail);
+
+  expect(await screen.findByRole('heading', { name: '乌鳢' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '取消收藏' })).not.toBeInTheDocument();
+  expect(fetchFavoriteStatusesMock).not.toHaveBeenCalled();
 });
 
 test('renders classification, content, and visible image attribution', async () => {

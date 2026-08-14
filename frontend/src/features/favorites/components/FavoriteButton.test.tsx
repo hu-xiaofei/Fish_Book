@@ -6,6 +6,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
+import { deferred } from '../../../test/renderWithProviders';
 import { CURRENT_USER_QUERY_KEY } from '../../auth/api/currentUser';
 import { FAVORITES_QUERY_KEY } from '../api/favoritesApi';
 import { FavoriteButton } from './FavoriteButton';
@@ -44,19 +45,25 @@ function LocationProbe() {
 
 function renderButton({
   authenticated = true,
+  expiredSession = false,
   isFavorited = false,
 }: {
   authenticated?: boolean;
+  expiredSession?: boolean;
   isFavorited?: boolean;
 } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
-      queries: { retry: false },
+      queries: { retry: false, retryDelay: 0 },
       mutations: { retry: false },
     },
   });
   if (authenticated) {
-    queryClient.setQueryData(CURRENT_USER_QUERY_KEY, authenticatedUser);
+    queryClient.setQueryData(
+      CURRENT_USER_QUERY_KEY,
+      authenticatedUser,
+      expiredSession ? { updatedAt: 1 } : undefined,
+    );
   }
   queryClient.setQueryData([...FAVORITES_QUERY_KEY, 'status', 'channa-argus'], {
     items: [{ fishSlug: 'channa-argus', favorited: isFavorited }],
@@ -135,4 +142,54 @@ test('anonymous click navigates to login with the encoded current path', async (
   expect(screen.getByTestId('location')).toHaveTextContent(
     '/login?returnTo=%2Ffish%2Fchanna-argus%3Fview%3Ddetail',
   );
+});
+
+test('confirmed expired cached session redirects instead of mutating', async () => {
+  fetchCurrentUserMock.mockRejectedValue(new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED',
+    message: '请先登录',
+    fieldErrors: [],
+    requestId: 'test-request',
+  }));
+  const { queryClient, user } = renderButton({ expiredSession: true });
+
+  await waitFor(() => {
+    expect(queryClient.getQueryState(CURRENT_USER_QUERY_KEY)?.status).toBe('error');
+  });
+  await user.click(screen.getByRole('button', { name: '收藏' }));
+
+  expect(screen.getByTestId('location')).toHaveTextContent(
+    '/login?returnTo=%2Ffish%2Fchanna-argus%3Fview%3Ddetail',
+  );
+  expect(addFavoriteMock).not.toHaveBeenCalled();
+  expect(removeFavoriteMock).not.toHaveBeenCalled();
+});
+
+test('retained user remains usable after a transient non-authentication error', async () => {
+  fetchCurrentUserMock.mockRejectedValue(new ApiError(500, {
+    code: 'INTERNAL_ERROR',
+    message: 'temporary failure',
+    fieldErrors: [],
+    requestId: 'test-request',
+  }));
+  const { queryClient, user } = renderButton({ expiredSession: true });
+
+  await waitFor(() => {
+    expect(queryClient.getQueryState(CURRENT_USER_QUERY_KEY)?.status).toBe('error');
+  });
+  await user.click(screen.getByRole('button', { name: '收藏' }));
+
+  await waitFor(() => expect(addFavoriteMock).toHaveBeenCalledWith('channa-argus'));
+  expect(screen.getByTestId('location')).toHaveTextContent(
+    '/fish/channa-argus?view=detail',
+  );
+});
+
+test('initial session lookup keeps the favorite action disabled', () => {
+  fetchCurrentUserMock.mockReturnValue(deferred<User>().promise);
+  renderButton({ authenticated: false });
+
+  expect(screen.getByRole('button', { name: '收藏' })).toBeDisabled();
+  expect(addFavoriteMock).not.toHaveBeenCalled();
+  expect(removeFavoriteMock).not.toHaveBeenCalled();
 });

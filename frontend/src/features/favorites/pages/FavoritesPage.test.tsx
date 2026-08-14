@@ -6,8 +6,10 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
+import { deferred } from '../../../test/renderWithProviders';
 import { CURRENT_USER_QUERY_KEY } from '../../auth/api/currentUser';
 import { ProtectedRoute } from '../../auth/components/ProtectedRoute';
+import { favoritePageQueryKey } from '../api/favoritesApi';
 import type { FavoritePage } from '../model/types';
 import { FavoritesPage } from './FavoritesPage';
 
@@ -65,10 +67,14 @@ function renderFavorites({
   initialEntry = '/favorites',
   protectedRoute = false,
   queryRetry = false,
+  cachedUser,
+  cachedFavoritePage,
 }: {
   initialEntry?: string;
   protectedRoute?: boolean;
   queryRetry?: boolean | number;
+  cachedUser?: User;
+  cachedFavoritePage?: FavoritePage;
 } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -78,6 +84,16 @@ function renderFavorites({
   });
   if (!protectedRoute) {
     queryClient.setQueryData(CURRENT_USER_QUERY_KEY, authenticatedUser);
+  }
+  if (cachedUser) {
+    queryClient.setQueryData(CURRENT_USER_QUERY_KEY, cachedUser, { updatedAt: 1 });
+  }
+  if (cachedFavoritePage) {
+    queryClient.setQueryData(
+      favoritePageQueryKey(cachedFavoritePage.page),
+      cachedFavoritePage,
+      { updatedAt: 1 },
+    );
   }
 
   function Wrapper({ children }: PropsWithChildren) {
@@ -274,4 +290,25 @@ test('the protected page redirects an anonymous session before loading favorites
 
   expect(await screen.findByRole('heading', { name: '登录' })).toBeInTheDocument();
   expect(fetchFavoritePageMock).not.toHaveBeenCalled();
+});
+
+test('the protected page hides retained favorites after a cached session expires', async () => {
+  const session = deferred<User>();
+  fetchCurrentUserMock.mockReturnValue(session.promise);
+  renderFavorites({
+    protectedRoute: true,
+    cachedUser: authenticatedUser,
+    cachedFavoritePage: populatedPage,
+  });
+
+  expect(screen.getByRole('heading', { name: '乌鳢' })).toBeInTheDocument();
+  session.reject(new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED',
+    message: '请先登录',
+    fieldErrors: [],
+    requestId: 'test-request',
+  }));
+
+  expect(await screen.findByRole('heading', { name: '登录' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '乌鳢' })).not.toBeInTheDocument();
 });

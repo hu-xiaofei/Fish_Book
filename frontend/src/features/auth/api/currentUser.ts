@@ -4,11 +4,22 @@ import type { User } from '../../../shared/api/types';
 
 export const CURRENT_USER_QUERY_KEY = ['current-user'] as const;
 
+export function isConfirmedUnauthorized(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
+export function hasUsableCurrentUser(
+  user: User | undefined,
+  error: unknown,
+): user is User {
+  return user !== undefined && !isConfirmedUnauthorized(error);
+}
+
 export const currentUserQueryConfig = {
   queryKey: CURRENT_USER_QUERY_KEY,
   staleTime: 5 * 60 * 1000,
   retry: (failureCount: number, error: Error) => {
-    if (error instanceof ApiError && error.status === 401) return false;
+    if (isConfirmedUnauthorized(error)) return false;
     return failureCount < 2;
   },
 };

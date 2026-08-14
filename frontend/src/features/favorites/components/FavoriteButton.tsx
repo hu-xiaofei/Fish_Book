@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   currentUserQueryConfig,
   fetchCurrentUser,
+  hasUsableCurrentUser,
+  isConfirmedUnauthorized,
 } from '../../auth/api/currentUser';
 import {
   addFavorite,
@@ -27,22 +29,30 @@ export function FavoriteButton({
     ...currentUserQueryConfig,
     queryFn: fetchCurrentUser,
   });
+  const hasAuthenticatedSession = hasUsableCurrentUser(
+    currentUser.data,
+    currentUser.error,
+  );
+  const confirmedUnauthorized = isConfirmedUnauthorized(currentUser.error);
+  const effectiveIsFavorited = hasAuthenticatedSession && isFavorited;
   const mutation = useMutation({
     mutationFn: () => (
-      isFavorited ? removeFavorite(fishSlug) : addFavorite(fishSlug)
+      effectiveIsFavorited ? removeFavorite(fishSlug) : addFavorite(fishSlug)
     ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: FAVORITES_QUERY_KEY }),
   });
 
-  const label = isFavorited ? '取消收藏' : '收藏';
-  const isPending = currentUser.isPending || mutation.isPending;
+  const label = effectiveIsFavorited ? '取消收藏' : '收藏';
+  const isSessionUnresolved = !hasAuthenticatedSession && !confirmedUnauthorized;
+  const isPending = currentUser.isPending || isSessionUnresolved || mutation.isPending;
 
   const handleClick = () => {
-    if (!currentUser.data) {
+    if (confirmedUnauthorized) {
       navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`);
       return;
     }
 
+    if (!hasAuthenticatedSession) return;
     mutation.mutate();
   };
 
@@ -51,7 +61,7 @@ export function FavoriteButton({
       <button
         type="button"
         aria-label={mutation.isPending ? '正在处理收藏' : label}
-        aria-pressed={isFavorited}
+        aria-pressed={effectiveIsFavorited}
         disabled={isPending}
         onClick={handleClick}
       >
