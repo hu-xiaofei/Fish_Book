@@ -5,6 +5,7 @@ import {
   currentUserQueryConfig,
   fetchCurrentUser,
 } from '../../auth/api/currentUser';
+import { SessionNav } from '../../auth/components/SessionNav';
 import {
   favoriteStatusQueryKey,
   favoriteStatusQueryRetry,
@@ -72,12 +73,18 @@ export function FishCatalogPage() {
           <h1>FishBook</h1>
           <p>记录渔获，认识鱼类。</p>
         </div>
-        <nav aria-label="主要导航" className={styles.nav}>
-          <Link to="/">首页</Link>
-          <Link to="/login">登录</Link>
-          <Link to="/register">注册</Link>
-          <Link to="/profile">个人资料</Link>
-        </nav>
+        <div className={styles.navigation}>
+          <nav aria-label="主要导航">
+            <Link to="/">首页</Link>
+            {!currentUser.data ? (
+              <>
+                <Link to="/login">登录</Link>
+                <Link to="/register">注册</Link>
+              </>
+            ) : null}
+          </nav>
+          <SessionNav />
+        </div>
       </header>
 
       <section className={styles.controls} aria-label="鱼类检索">

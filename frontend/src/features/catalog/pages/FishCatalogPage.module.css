@@ -25,13 +25,15 @@
   color: #587068;
 }
 
-.nav {
+.navigation,
+.navigation nav {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem 1rem;
+  align-items: center;
 }
 
-.nav a,
+.navigation a,
 .cardGrid a,
 .controls button,
 .pagination button,
@@ -40,7 +42,8 @@
   font-weight: 600;
 }
 
-.nav a:focus-visible,
+.navigation a:focus-visible,
+.navigation button:focus-visible,
 .cardGrid a:focus-visible,
 .controls button:focus-visible,
 .controls input:focus-visible,

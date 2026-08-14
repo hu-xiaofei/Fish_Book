@@ -98,6 +98,7 @@ function renderCatalog(initialEntry: string, queryRetry: boolean | number = fals
         <MemoryRouter initialEntries={[initialEntry]}>
           <Routes>
             <Route path="/" element={<><FishCatalogPage /><LocationProbe /><SearchNavigation /></>} />
+            <Route path="/favorites" element={<><h1>收藏页</h1><LocationProbe /></>} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,
@@ -126,6 +127,33 @@ test('loads favorite statuses for all 12 visible fish in one batch request', asy
   expect(fetchFavoriteStatusesMock).toHaveBeenCalledWith(
     pageWith12Fish.items.map((fish) => fish.slug),
   );
+});
+
+test('authenticated catalog navigation opens personal favorites', async () => {
+  const { user } = renderCatalog('/');
+
+  await user.click(await screen.findByRole('link', { name: '我的收藏' }));
+
+  expect(screen.getByRole('heading', { name: '收藏页' })).toBeInTheDocument();
+  expect(screen.getByTestId('location')).toHaveTextContent('/favorites');
+  expect(screen.queryByRole('link', { name: '登录' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: '注册' })).not.toBeInTheDocument();
+});
+
+test('anonymous catalog navigation keeps login and registration without personal links', async () => {
+  fetchCurrentUserMock.mockRejectedValue(new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED',
+    message: '请先登录',
+    fieldErrors: [],
+    requestId: 'test-request',
+  }));
+
+  renderCatalog('/');
+
+  expect(await screen.findByRole('link', { name: '登录' })).toHaveAttribute('href', '/login');
+  expect(screen.getByRole('link', { name: '注册' })).toHaveAttribute('href', '/register');
+  expect(screen.queryByRole('link', { name: '我的收藏' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: '个人资料' })).not.toBeInTheDocument();
 });
 
 test('does not retry an unauthorized favorite status request', async () => {

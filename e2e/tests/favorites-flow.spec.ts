@@ -28,7 +28,7 @@ test('keeps a personal favorite through navigation and removes it persistently',
   await snakeheadCard.getByRole('button', { name: '收藏' }).click();
   await expect(snakeheadCard.getByRole('button', { name: '取消收藏' })).toBeVisible();
 
-  await page.goto('/favorites');
+  await page.getByRole('link', { name: '我的收藏' }).click();
   await expect(page).toHaveURL(/\/favorites$/);
   await expect(page.getByRole('heading', { name: '乌鳢' })).toBeVisible();
 
