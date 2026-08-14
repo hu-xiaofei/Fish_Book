@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { ApiError } from '../../../shared/api/ApiError';
+import { FAVORITES_QUERY_KEY } from '../../favorites/api/favoritesApi';
 import { logout } from '../api/authApi';
 import {
   CURRENT_USER_QUERY_KEY,
@@ -18,6 +19,7 @@ export function SessionNav() {
   const logoutMutation = useMutation({
     mutationFn: logout,
     onSuccess: () => {
+      queryClient.removeQueries({ queryKey: FAVORITES_QUERY_KEY });
       queryClient.removeQueries({
         queryKey: CURRENT_USER_QUERY_KEY,
         exact: true,

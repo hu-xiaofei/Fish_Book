@@ -6,6 +6,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiError } from '../../../shared/api/ApiError';
 import { FormField } from '../../../shared/ui/FormField';
+import { FAVORITES_QUERY_KEY } from '../../favorites/api/favoritesApi';
 import { login } from '../api/authApi';
 import { CURRENT_USER_QUERY_KEY } from '../api/currentUser';
 import styles from './RegisterPage.module.css';
@@ -59,6 +60,7 @@ export function LoginPage() {
 
     try {
       const user = await login(input);
+      queryClient.removeQueries({ queryKey: FAVORITES_QUERY_KEY });
       queryClient.setQueryData(CURRENT_USER_QUERY_KEY, user);
       navigate(safeReturnTo, { replace: true });
     } catch (error) {

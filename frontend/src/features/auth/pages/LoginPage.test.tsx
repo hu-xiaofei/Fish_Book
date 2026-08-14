@@ -6,6 +6,8 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
+import { FAVORITES_QUERY_KEY } from '../../favorites/api/favoritesApi';
+import { CURRENT_USER_QUERY_KEY } from '../api/currentUser';
 import { LoginPage } from './LoginPage';
 
 const { loginMock } = vi.hoisted(() => ({
@@ -52,6 +54,16 @@ function renderLoginPage(initialEntry = '/login') {
   };
 }
 
+function seedUserAFavorites(queryClient: QueryClient) {
+  queryClient.setQueryData([...FAVORITES_QUERY_KEY, 'page', 0], {
+    items: [{ fishSlug: 'user-a-fish' }],
+    page: 0,
+  });
+  queryClient.setQueryData([...FAVORITES_QUERY_KEY, 'status', 'user-a-fish'], {
+    items: [{ fishSlug: 'user-a-fish', favorited: true }],
+  });
+}
+
 async function fillLoginForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('邮箱'), 'angler@example.com');
   await user.type(screen.getByLabelText('密码'), 'strong-pass');
@@ -78,6 +90,44 @@ test('successful login caches the user without browser storage', async () => {
   expect(queryClient.getQueryData(['current-user'])).toMatchObject({ id: 1 });
   expect(storageSpy).not.toHaveBeenCalled();
   storageSpy.mockRestore();
+});
+
+test('successful account transition removes all prior-user favorite queries first', async () => {
+  const priorUser = {
+    id: 1,
+    email: 'prior@example.com',
+    nickname: 'Prior',
+    role: 'USER',
+  } satisfies User;
+  const nextUser = {
+    id: 2,
+    email: 'angler@example.com',
+    nickname: 'Next',
+    role: 'USER',
+  } satisfies User;
+  loginMock.mockResolvedValue(nextUser);
+  const { user, queryClient } = renderLoginPage();
+  queryClient.setQueryData(CURRENT_USER_QUERY_KEY, priorUser);
+  seedUserAFavorites(queryClient);
+  let exposedPriorFavoritesToNextUser = false;
+  const unsubscribe = queryClient.getQueryCache().subscribe(() => {
+    const currentUser = queryClient.getQueryData<User>(CURRENT_USER_QUERY_KEY);
+    const hasFavoriteData = queryClient
+      .getQueriesData({ queryKey: FAVORITES_QUERY_KEY })
+      .some(([, data]) => data !== undefined);
+    if (currentUser?.id === nextUser.id && hasFavoriteData) {
+      exposedPriorFavoritesToNextUser = true;
+    }
+  });
+
+  await fillLoginForm(user);
+  await user.click(screen.getByRole('button', { name: '登录' }));
+
+  expect(await screen.findByText('个人资料')).toBeInTheDocument();
+  unsubscribe();
+  expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toEqual(nextUser);
+  expect(queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY })).toEqual([]);
+  expect(exposedPriorFavoritesToNextUser).toBe(false);
 });
 
 test('successful login returns to a same-origin path from the query string', async () => {
@@ -137,12 +187,15 @@ test('invalid credentials show the server message', async () => {
     fieldErrors: [],
     requestId: 'test-request',
   }));
-  const { user } = renderLoginPage();
+  const { user, queryClient } = renderLoginPage();
+  seedUserAFavorites(queryClient);
 
   await fillLoginForm(user);
   await user.click(screen.getByRole('button', { name: '登录' }));
 
   expect(await screen.findByText('邮箱或密码错误')).toBeInTheDocument();
+  expect(queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY }))
+    .toHaveLength(2);
 });
 
 test('ordinary login errors do not expose backend details', async () => {
