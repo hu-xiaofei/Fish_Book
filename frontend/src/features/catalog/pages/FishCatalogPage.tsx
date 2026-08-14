@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { ApiError } from '../../../shared/api/ApiError';
 import {
   currentUserQueryConfig,
   fetchCurrentUser,
@@ -59,6 +60,8 @@ export function FishCatalogPage() {
   const favoriteBySlug = new Map(
     favoriteStatuses.data?.items.map((status) => [status.fishSlug, status.favorited]),
   );
+  const isConfirmedAnonymous = currentUser.error instanceof ApiError
+    && currentUser.error.status === 401;
 
   const updateFilters = (update: (current: CatalogFiltersValue) => CatalogFiltersValue) => {
     const next = update(latestFilters.current);
@@ -76,7 +79,7 @@ export function FishCatalogPage() {
         <div className={styles.navigation}>
           <nav aria-label="主要导航">
             <Link to="/">首页</Link>
-            {!currentUser.data ? (
+            {isConfirmedAnonymous ? (
               <>
                 <Link to="/login">登录</Link>
                 <Link to="/register">注册</Link>

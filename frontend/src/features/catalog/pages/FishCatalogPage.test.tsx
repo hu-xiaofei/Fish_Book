@@ -5,6 +5,7 @@ import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
+import { CURRENT_USER_QUERY_KEY } from '../../auth/api/currentUser';
 import { favoriteStatusQueryKey } from '../../favorites/api/favoritesApi';
 import type { FishFilterOptions, FishPage, FishSummary } from '../model/types';
 import { FishCatalogPage } from './FishCatalogPage';
@@ -85,10 +86,17 @@ function SearchNavigation() {
   return <Link to="/?q=%E9%B2%A4">导航到鲤</Link>;
 }
 
-function renderCatalog(initialEntry: string, queryRetry: boolean | number = false) {
+function renderCatalog(
+  initialEntry: string,
+  queryRetry: boolean | number = false,
+  cachedUser?: User,
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: queryRetry, retryDelay: 0 } },
   });
+  if (cachedUser) {
+    queryClient.setQueryData(CURRENT_USER_QUERY_KEY, cachedUser, { updatedAt: 1 });
+  }
   const user = userEvent.setup();
   return {
     queryClient,
@@ -99,6 +107,8 @@ function renderCatalog(initialEntry: string, queryRetry: boolean | number = fals
           <Routes>
             <Route path="/" element={<><FishCatalogPage /><LocationProbe /><SearchNavigation /></>} />
             <Route path="/favorites" element={<><h1>收藏页</h1><LocationProbe /></>} />
+            <Route path="/login" element={<><h1>登录页</h1><LocationProbe /></>} />
+            <Route path="/register" element={<><h1>注册页</h1><LocationProbe /></>} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,
@@ -154,6 +164,50 @@ test('anonymous catalog navigation keeps login and registration without personal
   expect(screen.getByRole('link', { name: '注册' })).toHaveAttribute('href', '/register');
   expect(screen.queryByRole('link', { name: '我的收藏' })).not.toBeInTheDocument();
   expect(screen.queryByRole('link', { name: '个人资料' })).not.toBeInTheDocument();
+});
+
+test('expired cached session replaces personal links with usable guest navigation', async () => {
+  fetchCurrentUserMock.mockRejectedValue(new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED',
+    message: '请先登录',
+    fieldErrors: [],
+    requestId: 'test-request',
+  }));
+  const { user } = renderCatalog('/', false, authenticatedUser);
+
+  await waitFor(() => expect(fetchCurrentUserMock).toHaveBeenCalledTimes(1));
+  expect(await screen.findByRole('link', { name: '登录' })).toHaveAttribute('href', '/login');
+  expect(screen.getByRole('link', { name: '注册' })).toHaveAttribute('href', '/register');
+  expect(screen.queryByRole('link', { name: '我的收藏' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: '个人资料' })).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole('link', { name: '登录' }));
+  expect(screen.getByRole('heading', { name: '登录页' })).toBeInTheDocument();
+  expect(screen.getByTestId('location')).toHaveTextContent('/login');
+});
+
+test('does not flash guest navigation while the session lookup is pending', () => {
+  fetchCurrentUserMock.mockImplementation(() => new Promise(() => undefined));
+
+  renderCatalog('/');
+
+  expect(screen.queryByRole('link', { name: '登录' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: '注册' })).not.toBeInTheDocument();
+});
+
+test('does not present guest navigation after a transient session lookup error', async () => {
+  fetchCurrentUserMock.mockRejectedValue(new ApiError(500, {
+    code: 'INTERNAL_ERROR',
+    message: 'session database unavailable',
+    fieldErrors: [],
+    requestId: 'test-request',
+  }));
+
+  renderCatalog('/');
+
+  await waitFor(() => expect(fetchCurrentUserMock).toHaveBeenCalledTimes(3));
+  expect(screen.queryByRole('link', { name: '登录' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: '注册' })).not.toBeInTheDocument();
 });
 
 test('does not retry an unauthorized favorite status request', async () => {
