@@ -13,6 +13,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
@@ -120,6 +121,65 @@ class DefaultFishCatalogQueryServiceTest {
     }
 
     @Test
+    void mapsCanonicalSlugToReferenceView() {
+        repository.detail = fish();
+
+        assertThat(service.getReferenceBySlug("channa-argus"))
+                .isEqualTo(new FishReferenceView(1L, "channa-argus"));
+    }
+
+    @Test
+    void returnsReferencesInRequestedSlugOrderWhenRepositoryOrderDiffers() {
+        FishSpecies carp = carp();
+        repository.bySlugs = List.of(carp, fish());
+
+        assertThat(service.getReferencesBySlugs(List.of("channa-argus", "cyprinus-carpio")))
+                .containsExactly(
+                        new FishReferenceView(1L, "channa-argus"),
+                        new FishReferenceView(2L, "cyprinus-carpio"));
+    }
+
+    @Test
+    void returnsSummariesInRequestedIdOrderWhenRepositoryOrderDiffers() {
+        FishSpecies carp = carp();
+        repository.byIds = List.of(fish(), carp);
+
+        assertThat(service.getSummariesByIds(List.of(2L, 1L)))
+                .extracting(FishSummaryView::slug)
+                .containsExactly("cyprinus-carpio", "channa-argus");
+    }
+
+    @Test
+    void rejectsMissingReferenceSlug() {
+        assertThatThrownBy(() -> service.getReferencesBySlugs(List.of("missing-fish")))
+                .isInstanceOf(FishNotFoundException.class);
+    }
+
+    @Test
+    void rejectsMissingSummaryIdAsAnImpossibleState() {
+        assertThatThrownBy(() -> service.getSummariesByIds(List.of(99L)))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void rejectsMalformedReferenceBatchArguments() {
+        assertThatThrownBy(() -> service.getReferencesBySlugs(null))
+                .isInstanceOf(InvalidCatalogQueryException.class);
+        assertThatThrownBy(() -> service.getReferencesBySlugs(Arrays.asList("channa-argus", null)))
+                .isInstanceOf(InvalidCatalogQueryException.class);
+        assertThatThrownBy(() -> service.getReferencesBySlugs(List.of("channa-argus", "channa-argus")))
+                .isInstanceOf(InvalidCatalogQueryException.class);
+    }
+
+    @Test
+    void rejectsMalformedSummaryBatchArguments() {
+        assertThatThrownBy(() -> service.getSummariesByIds(null))
+                .isInstanceOf(InvalidCatalogQueryException.class);
+        assertThatThrownBy(() -> service.getSummariesByIds(Arrays.asList(1L, null)))
+                .isInstanceOf(InvalidCatalogQueryException.class);
+    }
+
+    @Test
     void returnsFamiliesInRepositoryOrderAndHabitatsInEnumOrder() {
         FishFilterOptionsView options = service.getFilterOptions();
 
@@ -142,12 +202,27 @@ class DefaultFishCatalogQueryServiceTest {
                 1, now, now);
     }
 
+    private static FishSpecies carp() {
+        Instant now = Instant.parse("2026-08-11T00:00:00Z");
+        return new FishSpecies(
+                2L, "cyprinus-carpio", "鲤", "Cyprinus carpio", "鲤科", "Cyprinidae", "鲤属", "Cyprinus",
+                List.of("鲤鱼"), EnumSet.of(HabitatType.RIVER, HabitatType.LAKE),
+                "身体粗壮", "最大可达1米", "河流和湖泊", "欧亚大陆", "常见淡水鱼",
+                new ImageAttribution(
+                        "/images/fish/cyprinus-carpio.jpg", "鲤（Cyprinus carpio）",
+                        "https://commons.wikimedia.org/wiki/File:Cyprinus_carpio.jpg", "Test Author",
+                        "CC BY 4.0", "https://creativecommons.org/licenses/by/4.0/"),
+                2, now, now);
+    }
+
     private static final class RecordingFishRepository implements FishRepository {
 
         private FishSearchCriteria lastCriteria;
         private FishPage page;
         private FishSpecies detail;
         private List<String> families = List.of();
+        private List<FishSpecies> byIds = List.of();
+        private List<FishSpecies> bySlugs = List.of();
 
         @Override
         public FishPage search(FishSearchCriteria criteria) {
@@ -158,6 +233,16 @@ class DefaultFishCatalogQueryServiceTest {
         @Override
         public Optional<FishSpecies> findBySlug(String slug) {
             return Optional.ofNullable(detail);
+        }
+
+        @Override
+        public List<FishSpecies> findAllByIds(List<Long> ids) {
+            return byIds;
+        }
+
+        @Override
+        public List<FishSpecies> findAllBySlugs(List<String> slugs) {
+            return bySlugs;
         }
 
         @Override

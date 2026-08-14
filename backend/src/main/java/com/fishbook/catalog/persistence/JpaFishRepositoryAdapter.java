@@ -16,6 +16,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -53,6 +54,34 @@ public class JpaFishRepositoryAdapter implements FishRepository {
     @Override
     public Optional<FishSpecies> findBySlug(String slug) {
         return repository.findBySlug(slug).map(this::toDomain);
+    }
+
+    @Override
+    public List<FishSpecies> findAllByIds(List<Long> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, FishSpeciesJpaEntity> entitiesById = repository.findAllWithDetailsByIdIn(ids).stream()
+                .collect(Collectors.toMap(FishSpeciesJpaEntity::getId, Function.identity()));
+        return ids.stream()
+                .map(entitiesById::get)
+                .filter(Objects::nonNull)
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<FishSpecies> findAllBySlugs(List<String> slugs) {
+        if (slugs.isEmpty()) {
+            return List.of();
+        }
+        Map<String, FishSpeciesJpaEntity> entitiesBySlug = repository.findAllWithDetailsBySlugIn(slugs).stream()
+                .collect(Collectors.toMap(FishSpeciesJpaEntity::getSlug, Function.identity()));
+        return slugs.stream()
+                .map(entitiesBySlug::get)
+                .filter(Objects::nonNull)
+                .map(this::toDomain)
+                .toList();
     }
 
     @Override

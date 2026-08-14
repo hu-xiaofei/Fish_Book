@@ -8,5 +8,9 @@ public interface FishRepository {
 
     Optional<FishSpecies> findBySlug(String slug);
 
+    List<FishSpecies> findAllByIds(List<Long> ids);
+
+    List<FishSpecies> findAllBySlugs(List<String> slugs);
+
     List<String> findAvailableFamilies();
 }

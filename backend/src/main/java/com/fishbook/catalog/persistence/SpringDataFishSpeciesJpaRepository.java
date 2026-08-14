@@ -57,6 +57,10 @@ interface SpringDataFishSpeciesJpaRepository extends JpaRepository<FishSpeciesJp
     List<FishSpeciesJpaEntity> findAllWithDetailsByIdIn(@Param("ids") Collection<Long> ids);
 
     @EntityGraph(attributePaths = {"aliases", "habitats"})
+    @Query("select distinct f from FishSpeciesJpaEntity f where f.slug in :slugs")
+    List<FishSpeciesJpaEntity> findAllWithDetailsBySlugIn(@Param("slugs") Collection<String> slugs);
+
+    @EntityGraph(attributePaths = {"aliases", "habitats"})
     Optional<FishSpeciesJpaEntity> findBySlug(String slug);
 
     @Query("select distinct f.familyNameZh from FishSpeciesJpaEntity f")

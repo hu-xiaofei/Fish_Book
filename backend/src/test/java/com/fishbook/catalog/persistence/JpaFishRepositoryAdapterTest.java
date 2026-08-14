@@ -13,6 +13,7 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.util.EnumSet;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -77,6 +78,36 @@ class JpaFishRepositoryAdapterTest {
         assertThat(adapter.findBySlug("channa-argus")).get()
                 .extracting(FishSpecies::aliases)
                 .asList().contains("黑鱼");
+    }
+
+    @Test
+    void findsDetailsByIdsInRequestedOrder() {
+        assertThat(adapter.findAllByIds(List.of(2L, 1L)))
+                .extracting(FishSpecies::slug)
+                .containsExactly("channa-argus", "cyprinus-carpio");
+        assertThat(adapter.findAllByIds(List.of(2L, 1L)))
+                .extracting(FishSpecies::aliases)
+                .containsExactly(List.of("黑鱼"), List.of("鲤鱼"));
+        assertThat(adapter.findAllByIds(List.of(2L, 1L)))
+                .extracting(FishSpecies::habitats)
+                .containsExactly(
+                        EnumSet.of(HabitatType.LAKE, HabitatType.POND),
+                        EnumSet.of(HabitatType.RIVER, HabitatType.LAKE));
+    }
+
+    @Test
+    void findsDetailsBySlugsInRequestedOrder() {
+        assertThat(adapter.findAllBySlugs(List.of("channa-argus", "cyprinus-carpio")))
+                .extracting(FishSpecies::slug)
+                .containsExactly("channa-argus", "cyprinus-carpio");
+        assertThat(adapter.findAllBySlugs(List.of("channa-argus", "cyprinus-carpio")))
+                .extracting(FishSpecies::aliases)
+                .containsExactly(List.of("黑鱼"), List.of("鲤鱼"));
+        assertThat(adapter.findAllBySlugs(List.of("channa-argus", "cyprinus-carpio")))
+                .extracting(FishSpecies::habitats)
+                .containsExactly(
+                        EnumSet.of(HabitatType.LAKE, HabitatType.POND),
+                        EnumSet.of(HabitatType.RIVER, HabitatType.LAKE));
     }
 
     @Test

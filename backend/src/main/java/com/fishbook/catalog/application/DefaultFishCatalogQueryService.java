@@ -11,7 +11,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class DefaultFishCatalogQueryService implements FishCatalogQueryService {
@@ -39,12 +42,53 @@ public class DefaultFishCatalogQueryService implements FishCatalogQueryService {
     @Override
     @Transactional(readOnly = true)
     public FishDetailView getBySlug(String slug) {
-        if (slug == null || !slug.matches(CANONICAL_SLUG_PATTERN)) {
-            throw new InvalidCatalogQueryException("slug must be canonical and nonblank");
-        }
+        validateSlug(slug);
         FishSpecies fish = repository.findBySlug(slug)
                 .orElseThrow(() -> new FishNotFoundException(slug));
         return toDetail(fish);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public FishReferenceView getReferenceBySlug(String slug) {
+        validateSlug(slug);
+        FishSpecies fish = repository.findBySlug(slug)
+                .orElseThrow(() -> new FishNotFoundException(slug));
+        return toReference(fish);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<FishReferenceView> getReferencesBySlugs(List<String> slugs) {
+        validateSlugs(slugs);
+        Map<String, FishSpecies> fishBySlug = repository.findAllBySlugs(slugs).stream()
+                .collect(Collectors.toMap(FishSpecies::slug, Function.identity()));
+        return slugs.stream()
+                .map(slug -> {
+                    FishSpecies fish = fishBySlug.get(slug);
+                    if (fish == null) {
+                        throw new FishNotFoundException(slug);
+                    }
+                    return toReference(fish);
+                })
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<FishSummaryView> getSummariesByIds(List<Long> ids) {
+        validateIds(ids);
+        Map<Long, FishSpecies> fishById = repository.findAllByIds(ids).stream()
+                .collect(Collectors.toMap(FishSpecies::id, Function.identity()));
+        return ids.stream()
+                .map(id -> fishById.get(id))
+                .map(fish -> {
+                    if (fish == null) {
+                        throw new IllegalStateException("fish ID must exist");
+                    }
+                    return toSummary(fish);
+                })
+                .toList();
     }
 
     @Override
@@ -65,6 +109,32 @@ public class DefaultFishCatalogQueryService implements FishCatalogQueryService {
                 fish.habitats().stream().map(this::toHabitatOption).toList(),
                 fish.image().path(),
                 fish.image().altText());
+    }
+
+    private FishReferenceView toReference(FishSpecies fish) {
+        return new FishReferenceView(fish.id(), fish.slug());
+    }
+
+    private void validateSlug(String slug) {
+        if (slug == null || !slug.matches(CANONICAL_SLUG_PATTERN)) {
+            throw new InvalidCatalogQueryException("slug must be canonical and nonblank");
+        }
+    }
+
+    private void validateSlugs(List<String> slugs) {
+        if (slugs == null || slugs.stream().anyMatch(Objects::isNull)) {
+            throw new InvalidCatalogQueryException("slugs must not contain null values");
+        }
+        slugs.forEach(this::validateSlug);
+        if (slugs.size() != slugs.stream().distinct().count()) {
+            throw new InvalidCatalogQueryException("slugs must not contain duplicates");
+        }
+    }
+
+    private void validateIds(List<Long> ids) {
+        if (ids == null || ids.stream().anyMatch(Objects::isNull)) {
+            throw new InvalidCatalogQueryException("ids must not contain null values");
+        }
     }
 
     private FishDetailView toDetail(FishSpecies fish) {
