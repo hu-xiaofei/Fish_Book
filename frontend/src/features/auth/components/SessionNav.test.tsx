@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
+import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
 import { FAVORITES_QUERY_KEY } from '../../favorites/api/favoritesApi';
 import { CURRENT_USER_QUERY_KEY } from '../api/currentUser';
@@ -81,6 +82,12 @@ test('authenticated navigation includes favorites without advertising catches ea
 
 test('successful logout removes all favorite queries before current-user data', async () => {
   const { queryClient, user } = renderSessionNav();
+  fetchCurrentUserMock.mockRejectedValue(new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED',
+    message: 'Authentication is required',
+    fieldErrors: [],
+    requestId: 'logout-session-ended',
+  }));
   seedUserFavorites(queryClient);
   let exposedFavoritesWithoutAUser = false;
   const unsubscribe = queryClient.getQueryCache().subscribe(() => {
