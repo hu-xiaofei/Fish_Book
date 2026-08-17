@@ -12,6 +12,10 @@ FishBook 是一个面向中国淡水鱼知识学习的全栈鱼类图鉴项目�
 
 当前版本收录 12 种经过整理的常见淡水鱼：鲫、鲤、草鱼、青鱼、鲢、鳙、乌鳢、鳜、黄颡鱼、团头鲂、翘嘴鲌和泥鳅。鱼类图片均保存在项目中，并记录来源、作者和许可证信息。
 
+### 项目状态
+
+第一阶段个人产品闭环已经完成：用户可以注册并维护个人资料、浏览公开鱼类图鉴，并管理按账号隔离的私有收藏。下一阶段将围绕钓获记录展开，在不改变公开图鉴只读边界的前提下继续完善个人使用闭环。
+
 ### 当前功能
 
 **公开只读鱼类图鉴**
@@ -63,7 +67,7 @@ Node.js 版本固定为 `24.18.0`。前端和端到端测试依赖均通过各�
 ```
 
 - Nginx 在 `http://localhost:8080` 提供前端，并将 `/api` 和 `/actuator` 转发到内部后端服务。
-- Spring Boot 按领域、应用、持久化和 Web 边界组织用户与图鉴功能。
+- Spring Boot 按领域、应用、持久化和 Web 边界组织用户、图鉴与收藏功能。
 - Flyway 管理数据库表结构和首批鱼类数据迁移。
 - Spring Session 将登录会话保存到 MySQL。
 - MinIO 已作为未来对象存储基础设施运行；当前图鉴图片是经过授权核验、由前端同源提供的本地静态资源。
@@ -140,10 +144,10 @@ Fish_Book/
 
 当前交付已包含稳定的身份系统、公开只读图鉴和登录用户私有收藏。下一阶段可以继续开发：
 
+- 钓获记录的创建、查看、编辑和删除；
+- 由 MinIO 支撑的可选私有钓获照片；
 - 管理员账号初始化和基于角色的权限控制；
-- 鱼类新增、编辑、发布和下架；
-- 图片上传与 MinIO 对象存储；
-- 钓获记录和更多个人学习功能。
+- 鱼类新增、编辑、发布和下架。
 
 仓库目前没有项目级应用许可证文件，因此不要据此推断应用代码的开源授权。鱼类图片使用各自的开放许可证，详情见图片来源记录。
 
@@ -153,6 +157,8 @@ Fish_Book/
 - [鱼类资料与图片来源记录](docs/data-sources/fish-catalog-attribution.md)
 - [FishBook MVP 设计规格](docs/superpowers/specs/2026-08-07-fishbook-mvp-design.md)
 - [鱼类图鉴核心设计规格](docs/superpowers/specs/2026-08-11-fish-catalog-core-design.md)
+- [个人产品闭环设计规格](docs/superpowers/specs/2026-08-14-personal-product-loop-design.md)
+- [个人收藏实施计划](docs/superpowers/plans/2026-08-14-personal-favorites.md)
 
 ---
 
@@ -165,6 +171,10 @@ Fish_Book/
 FishBook is a learning-oriented full-stack fish encyclopedia focused on Chinese freshwater fish and on practicing a realistic software engineering workflow. The current application provides a public read-only fish catalog, a complete identity flow, and private favorites for authenticated users, with the React frontend and Spring Boot API served from the same origin.
 
 The catalog currently contains 12 curated freshwater species: crucian carp, common carp, grass carp, black carp, silver carp, bighead carp, northern snakehead, mandarin fish, yellow catfish, Wuchang bream, topmouth culter, and weather loach. Every catalog image is stored locally with recorded source, author, and license metadata.
+
+### Project Status
+
+The first personal-product milestone is complete: users can register and maintain a profile, browse the public fish catalog, and manage account-isolated private favorites. The next milestone focuses on catch records while preserving the public catalog's read-only boundary.
 
 ### Current Features
 
@@ -217,7 +227,7 @@ Browser
 ```
 
 - Nginx serves the frontend at `http://localhost:8080` and proxies `/api` and `/actuator` to the internal backend service.
-- Spring Boot separates the identity and catalog features across domain, application, persistence, and Web boundaries.
+- Spring Boot separates the identity, catalog, and favorites features across domain, application, persistence, and Web boundaries.
 - Flyway owns database schema and initial catalog-data migrations.
 - Spring Session stores authenticated sessions in MySQL.
 - MinIO is provisioned as infrastructure for future object storage. Current catalog images are audited local static assets served by the frontend from the same origin.
@@ -294,10 +304,10 @@ Fish_Book/
 
 The current delivery includes a stable identity system, a public read-only catalog, and private favorites for authenticated users. Natural next steps include:
 
+- create, view, edit, and delete catch records;
+- optional private catch photos backed by MinIO;
 - administrator bootstrap and role-based authorization;
-- create, edit, publish, and unpublish catalog workflows;
-- image uploads backed by MinIO object storage;
-- catch records and additional personal learning features.
+- create, edit, publish, and unpublish catalog workflows.
 
 The repository does not currently contain a project-level application license file, so no open-source license should be inferred for the application code. Fish images retain their individual open licenses; see the attribution record for details.
 
@@ -307,3 +317,5 @@ The repository does not currently contain a project-level application license fi
 - [Fish data and image attribution record](docs/data-sources/fish-catalog-attribution.md)
 - [FishBook MVP design specification](docs/superpowers/specs/2026-08-07-fishbook-mvp-design.md)
 - [Fish catalog core design specification](docs/superpowers/specs/2026-08-11-fish-catalog-core-design.md)
+- [Personal product-loop design specification](docs/superpowers/specs/2026-08-14-personal-product-loop-design.md)
+- [Personal favorites implementation plan](docs/superpowers/plans/2026-08-14-personal-favorites.md)
