@@ -86,9 +86,9 @@ class CatchRecordApiIntegrationTest {
     }
 
     @Test
-    void listUsesFixedPagingAndOnlyReturnsCurrentUsersSummaries() throws Exception {
+    void listUsesFixedPagingForMultipleRecordsOfTheSameFish() throws Exception {
         long ownNewer = insertCatchFor(USER_ID, "2026-08-19", "Newest", "private-key");
-        insertCatchFor(USER_ID, 8L, "2026-08-18", "Older", null);
+        insertCatchFor(USER_ID, "2026-08-18", "Older", null);
         insertCatchFor(OTHER_USER_ID, "2026-08-20", "Other user's record", null);
 
         mvc.perform(get("/api/v1/catches").with(user(USER_EMAIL)))
@@ -99,8 +99,10 @@ class CatchRecordApiIntegrationTest {
                 .andExpect(jsonPath("$.totalPages").value(1))
                 .andExpect(jsonPath("$.items.length()").value(2))
                 .andExpect(jsonPath("$.items[0].id").value(ownNewer))
+                .andExpect(jsonPath("$.items[0].fishSlug").value("channa-argus"))
                 .andExpect(jsonPath("$.items[0].location").value("Newest"))
                 .andExpect(jsonPath("$.items[0].hasPhoto").value(true))
+                .andExpect(jsonPath("$.items[1].fishSlug").value("channa-argus"))
                 .andExpect(jsonPath("$.items[0].notes").doesNotExist())
                 .andExpect(jsonPath("$.items[0].photoObjectKey").doesNotExist());
     }

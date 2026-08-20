@@ -78,7 +78,8 @@ public class DefaultFishCatalogQueryService implements FishCatalogQueryService {
     @Transactional(readOnly = true)
     public List<FishSummaryView> getSummariesByIds(List<Long> ids) {
         validateIds(ids);
-        Map<Long, FishSpecies> fishById = repository.findAllByIds(ids).stream()
+        List<Long> distinctIds = ids.stream().distinct().toList();
+        Map<Long, FishSpecies> fishById = repository.findAllByIds(distinctIds).stream()
                 .collect(Collectors.toMap(FishSpecies::id, Function.identity()));
         return ids.stream()
                 .map(id -> fishById.get(id))

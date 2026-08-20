@@ -150,6 +150,17 @@ class DefaultFishCatalogQueryServiceTest {
     }
 
     @Test
+    void returnsRepeatedSummariesInRequestedOrderWithOneLookupPerDistinctFishId() {
+        FishSpecies carp = carp();
+        repository.byIds = List.of(fish(), carp);
+
+        assertThat(service.getSummariesByIds(List.of(2L, 1L, 2L)))
+                .extracting(FishSummaryView::slug)
+                .containsExactly("cyprinus-carpio", "channa-argus", "cyprinus-carpio");
+        assertThat(repository.lastSummaryLookupIds).containsExactly(2L, 1L);
+    }
+
+    @Test
     void rejectsMissingReferenceSlug() {
         assertThatThrownBy(() -> service.getReferencesBySlugs(List.of("missing-fish")))
                 .isInstanceOf(FishNotFoundException.class);
@@ -223,6 +234,7 @@ class DefaultFishCatalogQueryServiceTest {
         private List<String> families = List.of();
         private List<FishSpecies> byIds = List.of();
         private List<FishSpecies> bySlugs = List.of();
+        private List<Long> lastSummaryLookupIds = List.of();
 
         @Override
         public FishPage search(FishSearchCriteria criteria) {
@@ -237,6 +249,7 @@ class DefaultFishCatalogQueryServiceTest {
 
         @Override
         public List<FishSpecies> findAllByIds(List<Long> ids) {
+            lastSummaryLookupIds = List.copyOf(ids);
             return byIds;
         }
 
