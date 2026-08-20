@@ -32,5 +32,5 @@ test('registers, restores the session, edits profile, and logs out', async ({ pa
   await page.getByRole('button', { name: '退出登录' }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.goto('/profile');
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/login\?returnTo=%2Fprofile$/);
 });
