@@ -6,6 +6,7 @@ import { RegisterPage } from '../features/auth/pages/RegisterPage';
 import { FishDetailPage } from '../features/catalog/pages/FishDetailPage';
 import { FavoritesPage } from '../features/favorites/pages/FavoritesPage';
 import { CatchListPage } from '../features/catchlog/pages/CatchListPage';
+import { CatchNewPage } from '../features/catchlog/pages/CatchNewPage';
 import { App } from './App';
 
 export const router = createBrowserRouter([
@@ -46,6 +47,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <CatchListPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/catches/new',
+    element: (
+      <ProtectedRoute>
+        <CatchNewPage />
       </ProtectedRoute>
     ),
   },

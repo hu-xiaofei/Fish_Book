@@ -26,3 +26,18 @@ test('opens an empty private catch list from authenticated navigation', async ({
   await expect(page.getByRole('heading', { name: '还没有钓获记录' })).toBeVisible();
   await expect(page.getByRole('link', { name: '记录第一次钓获' })).toBeVisible();
 });
+
+test('creates a private catch record from catalog-selected fish details', async ({ page }) => {
+  await registerAndLoginForCatches(page);
+
+  await page.getByRole('link', { name: '钓获记录' }).click();
+  await page.getByRole('link', { name: '记录第一次钓获' }).click();
+  await expect(page).toHaveURL(/\/catches\/new$/);
+
+  await page.getByLabel('鱼种').selectOption('channa-argus');
+  await page.getByLabel('钓获日期').fill('2026-08-20');
+  await page.getByLabel('地点').fill('城郊水库');
+  await page.getByRole('button', { name: '保存记录' }).click();
+
+  await expect(page).toHaveURL(/\/catches\/\d+$/);
+});
