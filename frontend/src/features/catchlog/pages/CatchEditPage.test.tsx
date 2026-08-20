@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { PropsWithChildren } from 'react';
@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
 import { CURRENT_USER_QUERY_KEY } from '../../auth/api/currentUser';
+import { ProtectedRoute } from '../../auth/components/ProtectedRoute';
 import { FAVORITES_QUERY_KEY } from '../../favorites/api/favoritesApi';
 import {
   catchDetailQueryKey,
@@ -17,10 +18,12 @@ import { CatchEditPage } from './CatchEditPage';
 const {
   fetchCatchRecordMock,
   fetchFishPageMock,
+  fetchCurrentUserMock,
   updateCatchRecordMock,
 } = vi.hoisted(() => ({
   fetchCatchRecordMock: vi.fn(),
   fetchFishPageMock: vi.fn(),
+  fetchCurrentUserMock: vi.fn(),
   updateCatchRecordMock: vi.fn(),
 }));
 
@@ -36,6 +39,11 @@ vi.mock('../api/catchRecordsApi', async (importOriginal) => {
 vi.mock('../../catalog/api/catalogApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../catalog/api/catalogApi')>();
   return { ...actual, fetchFishPage: fetchFishPageMock };
+});
+
+vi.mock('../../auth/api/currentUser', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../auth/api/currentUser')>();
+  return { ...actual, fetchCurrentUser: fetchCurrentUserMock };
 });
 
 const savedCatch: CatchRecordDetail = {
@@ -82,12 +90,22 @@ function LocationProbe() {
   return <output data-testid="location">{location.pathname}</output>;
 }
 
+function LoginCacheSafetyProbe() {
+  const queryClient = useQueryClient();
+  const hasPrivateData = queryClient.getQueryData(CURRENT_USER_QUERY_KEY) !== undefined
+    || queryClient.getQueriesData({ queryKey: ['catches'] }).some(([, data]) => data !== undefined)
+    || queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY }).some(([, data]) => data !== undefined);
+  return <output data-testid="private-cache-at-login">{hasPrivateData ? 'unsafe' : 'safe'}</output>;
+}
+
 function renderCatchEdit({
   initialEntry = '/catches/31/edit',
   cachedPrivateData = false,
+  protectedRoute = false,
 }: {
   initialEntry?: string;
   cachedPrivateData?: boolean;
+  protectedRoute?: boolean;
 } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -95,9 +113,11 @@ function renderCatchEdit({
       mutations: { retry: false },
     },
   });
-  queryClient.setQueryData(CURRENT_USER_QUERY_KEY, {
-    id: 1, email: 'angler@example.com', nickname: 'River', role: 'USER',
-  });
+  if (!protectedRoute) {
+    queryClient.setQueryData(CURRENT_USER_QUERY_KEY, {
+      id: 1, email: 'angler@example.com', nickname: 'River', role: 'USER',
+    });
+  }
   if (cachedPrivateData) {
     const page: CatchRecordPage = {
       items: [savedSummary], page: 0, size: 20, totalItems: 1, totalPages: 1,
@@ -115,14 +135,18 @@ function renderCatchEdit({
     );
   }
 
+  const page = protectedRoute ? (
+    <ProtectedRoute><CatchEditPage /></ProtectedRoute>
+  ) : <CatchEditPage />;
+
   return {
     queryClient,
     user: userEvent.setup(),
     ...render(
       <Routes>
-        <Route path="/catches/:id/edit" element={<><CatchEditPage /><LocationProbe /></>} />
+        <Route path="/catches/:id/edit" element={<>{page}<LocationProbe /></>} />
         <Route path="/catches/:id" element={<LocationProbe />} />
-        <Route path="/login" element={<LocationProbe />} />
+        <Route path="/login" element={<><LoginCacheSafetyProbe /><LocationProbe /></>} />
       </Routes>,
       { wrapper: Wrapper },
     ),
@@ -138,8 +162,12 @@ function notFoundError() {
 beforeEach(() => {
   fetchCatchRecordMock.mockReset();
   fetchFishPageMock.mockReset();
+  fetchCurrentUserMock.mockReset();
   updateCatchRecordMock.mockReset();
   fetchCatchRecordMock.mockResolvedValue(savedCatch);
+  fetchCurrentUserMock.mockResolvedValue({
+    id: 1, email: 'angler@example.com', nickname: 'River', role: 'USER',
+  });
   fetchFishPageMock.mockResolvedValue({
     items: [{
       slug: 'channa-argus', commonNameZh: '乌鳢', scientificName: 'Channa argus',
@@ -234,19 +262,21 @@ test('keeps entered values with a safe retryable update failure', async () => {
   expect(screen.getByLabelText('地点')).toHaveValue('河湾');
 });
 
-test('confirmed update 401 clears private caches before routing to login', async () => {
+test('confirmed edit PUT 401 clears private caches before the protected login route without another me request', async () => {
   updateCatchRecordMock.mockRejectedValue(new ApiError(401, {
     code: 'AUTHENTICATION_REQUIRED', message: '请先登录', fieldErrors: [], requestId: 'test-request',
   }));
-  const { user, queryClient } = renderCatchEdit({ cachedPrivateData: true });
+  const { user, queryClient } = renderCatchEdit({ cachedPrivateData: true, protectedRoute: true });
 
   await screen.findByRole('heading', { name: '编辑钓获记录' });
   await user.click(screen.getByRole('button', { name: '保存修改' }));
 
   await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/login'));
+  expect(screen.getByTestId('private-cache-at-login')).toHaveTextContent('safe');
   expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toBeUndefined();
   expect(queryClient.getQueriesData({ queryKey: ['catches'] }).every(([, data]) => data === undefined))
     .toBe(true);
   expect(queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY }).every(([, data]) => data === undefined))
     .toBe(true);
+  expect(fetchCurrentUserMock).toHaveBeenCalledTimes(1);
 });
