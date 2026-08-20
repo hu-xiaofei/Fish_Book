@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, type FieldPath } from 'react-hook-form';
 import { ZodError } from 'zod';
 import { isConfirmedUnauthorized } from '../../auth/api/currentUser';
@@ -31,13 +31,18 @@ function fieldProps(
   };
 }
 
+function millisecondsUntilNextShanghaiDay(today: string): number {
+  const nextMidnight = Date.parse(`${today}T16:00:00.000Z`);
+  return Math.max(1, nextMidnight - Date.now());
+}
+
 export function CatchRecordForm({
   fishOptions,
   initialValues,
   submitLabel,
   onSubmit,
 }: CatchRecordFormProps) {
-  const today = todayInShanghai();
+  const [today, setToday] = useState(todayInShanghai);
   const [serverError, setServerError] = useState<string>();
   const {
     register,
@@ -58,13 +63,31 @@ export function CatchRecordForm({
     },
   });
 
+  useEffect(() => {
+    let timeoutId: number;
+    const refreshToday = () => {
+      const currentToday = todayInShanghai();
+      setToday(currentToday);
+      timeoutId = window.setTimeout(
+        refreshToday,
+        millisecondsUntilNextShanghaiDay(currentToday),
+      );
+    };
+
+    timeoutId = window.setTimeout(
+      refreshToday,
+      millisecondsUntilNextShanghaiDay(todayInShanghai()),
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
   const submit = handleSubmit(async (values) => {
     clearErrors();
     setServerError(undefined);
 
     let input: CatchRecordInput;
     try {
-      input = parseCatchForm(values, today);
+      input = parseCatchForm(values, todayInShanghai());
     } catch (error) {
       if (error instanceof ZodError) {
         error.issues.forEach((issue) => {
@@ -121,6 +144,7 @@ export function CatchRecordForm({
       <FormField id="catch-caught-on" label="钓获日期" error={errors.caughtOn?.message}>
         <input
           type="date"
+          min="1000-01-01"
           max={today}
           {...fieldProps('catch-caught-on', errors.caughtOn?.message)}
           {...register('caughtOn')}

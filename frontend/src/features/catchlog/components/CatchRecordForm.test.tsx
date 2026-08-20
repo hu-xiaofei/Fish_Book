@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 import { deferred } from '../../../test/renderWithProviders';
@@ -92,6 +92,7 @@ test('uses date and measurement input constraints compatible with the parser bou
   renderForm();
 
   expect(screen.getByLabelText('钓获日期')).toHaveAttribute('type', 'date');
+  expect(screen.getByLabelText('钓获日期')).toHaveAttribute('min', '1000-01-01');
   expect(screen.getByLabelText('钓获日期')).toHaveAttribute('max');
   expect(screen.getByLabelText('长度（cm）')).toHaveAttribute('min', '0');
   expect(screen.getByLabelText('长度（cm）')).toHaveAttribute('max', '999999.99');
@@ -115,4 +116,38 @@ test('disables duplicate submission while the save is pending', async () => {
 
   saving.resolve();
   await waitFor(() => expect(screen.getByRole('button', { name: '保存记录' })).toBeEnabled());
+});
+
+test('recomputes Shanghai today on submit and refreshes the date max at midnight', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-08-20T15:59:59.000Z'));
+  try {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const { unmount } = renderForm({ onSubmit });
+    const caughtOn = screen.getByLabelText('钓获日期');
+
+    expect(caughtOn).toHaveAttribute('max', '2026-08-20');
+    fireEvent.change(screen.getByLabelText('鱼种'), { target: { value: 'channa-argus' } });
+    fireEvent.change(caughtOn, { target: { value: '2026-08-21' } });
+    fireEvent.change(screen.getByLabelText('地点'), { target: { value: '午夜钓点' } });
+
+    // Move the wall clock without firing the scheduled midnight callback: submit must read time afresh.
+    vi.setSystemTime(new Date('2026-08-20T16:00:00.000Z'));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '保存记录' }));
+      await Promise.resolve();
+    });
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ caughtOn: '2026-08-21' }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(caughtOn).toHaveAttribute('max', '2026-08-21');
+    expect(vi.getTimerCount()).toBe(1);
+
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });

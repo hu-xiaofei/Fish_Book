@@ -193,6 +193,44 @@ class CatchRecordApiIntegrationTest {
     }
 
     @Test
+    void dateBelowMySqlLowerBoundReturnsStableBadRequestWithoutSaving() throws Exception {
+        int before = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM catch_records WHERE user_id = ?", Integer.class, USER_ID);
+
+        mvc.perform(post("/api/v1/catches")
+                        .with(user(USER_EMAIL)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fishSlug":"channa-argus","caughtOn":"0999-12-31","location":"Lake"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_CATCH_RECORD"));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM catch_records WHERE user_id = ?", Integer.class, USER_ID))
+                .isEqualTo(before);
+    }
+
+    @Test
+    void malformedAndOverflowCatchIdsReturnStableBadRequestForEveryOwnedRecordMethod() throws Exception {
+        for (String invalidId : new String[]{"not-a-number", "999999999999999999999999999999999999"}) {
+            mvc.perform(get("/api/v1/catches/{id}", invalidId).with(user(USER_EMAIL)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("INVALID_CATCH_RECORD"));
+            mvc.perform(put("/api/v1/catches/{id}", invalidId)
+                            .with(user(USER_EMAIL)).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(validRequest()))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("INVALID_CATCH_RECORD"));
+            mvc.perform(delete("/api/v1/catches/{id}", invalidId)
+                            .with(user(USER_EMAIL)).with(csrf()))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("INVALID_CATCH_RECORD"));
+        }
+    }
+
+    @Test
     void malformedJsonRemainsInvalidRequestAndMissingFishUsesCatalogNotFound() throws Exception {
         mvc.perform(post("/api/v1/catches")
                         .with(user(USER_EMAIL)).with(csrf())

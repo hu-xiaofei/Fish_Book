@@ -51,6 +51,10 @@ export function catchRecordFormSchema(today: string) {
     fishSlug: z.string().regex(canonicalFishSlug, '请选择有效鱼种'),
     caughtOn: z.string()
       .refine(isIsoDate, '请输入有效日期')
+      .refine(
+        (value) => !isIsoDate(value) || value >= '1000-01-01',
+        '钓获日期不能早于 1000-01-01',
+      )
       .refine((value) => value <= today, '钓获日期不能晚于今天'),
     location: z.string().trim()
       .min(1, '请输入地点')

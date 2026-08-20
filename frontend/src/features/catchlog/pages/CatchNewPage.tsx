@@ -2,6 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { isConfirmedUnauthorized } from '../../auth/api/currentUser';
+import {
+  captureSessionGeneration,
+  isCurrentSessionGeneration,
+} from '../../auth/api/sessionCache';
 import { SessionNav } from '../../auth/components/SessionNav';
 import { useSessionExpiry } from '../../auth/hooks/useExpireSessionOnUnauthorized';
 import {
@@ -31,12 +35,16 @@ export function CatchNewPage() {
   });
   const createMutation = useMutation({
     mutationFn: createCatchRecord,
-    onSuccess: async (createdCatch) => {
+    onMutate: () => ({ sessionGeneration: captureSessionGeneration() }),
+    onSuccess: async (createdCatch, _input, context) => {
+      if (!context || !isCurrentSessionGeneration(context.sessionGeneration)) return;
       queryClient.setQueryData(catchDetailQueryKey(createdCatch.id), createdCatch);
       await queryClient.invalidateQueries({ queryKey: CATCHES_QUERY_KEY });
+      if (!isCurrentSessionGeneration(context.sessionGeneration)) return;
       navigate(`/catches/${createdCatch.id}`);
     },
-    onError: (error) => {
+    onError: (error, _input, context) => {
+      if (!context || !isCurrentSessionGeneration(context.sessionGeneration)) return;
       expireIfUnauthorized(error);
     },
   });

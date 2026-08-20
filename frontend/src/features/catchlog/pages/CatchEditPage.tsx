@@ -3,6 +3,10 @@ import { useEffect } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../../shared/api/ApiError';
 import { isConfirmedUnauthorized } from '../../auth/api/currentUser';
+import {
+  captureSessionGeneration,
+  isCurrentSessionGeneration,
+} from '../../auth/api/sessionCache';
 import { SessionNav } from '../../auth/components/SessionNav';
 import { useSessionExpiry } from '../../auth/hooks/useExpireSessionOnUnauthorized';
 import { fetchFishPage, fishListQueryKey } from '../../catalog/api/catalogApi';
@@ -64,12 +68,16 @@ export function CatchEditPage() {
   });
   const updateMutation = useMutation({
     mutationFn: (input: Parameters<typeof updateCatchRecord>[1]) => updateCatchRecord(id as number, input),
-    onSuccess: async (updatedCatch) => {
+    onMutate: () => ({ sessionGeneration: captureSessionGeneration() }),
+    onSuccess: async (updatedCatch, _input, context) => {
+      if (!context || !isCurrentSessionGeneration(context.sessionGeneration)) return;
       await queryClient.invalidateQueries({ queryKey: CATCHES_QUERY_KEY });
+      if (!isCurrentSessionGeneration(context.sessionGeneration)) return;
       queryClient.setQueryData(catchDetailQueryKey(updatedCatch.id), updatedCatch);
       navigate(`/catches/${updatedCatch.id}`);
     },
-    onError: (error) => {
+    onError: (error, _input, context) => {
+      if (!context || !isCurrentSessionGeneration(context.sessionGeneration)) return;
       expireIfUnauthorized(error);
     },
   });

@@ -56,6 +56,7 @@ describe('catch record form parsing', () => {
 
   test.each([
     ['a future caught-on date', { ...validValues, caughtOn: '2026-08-21' }],
+    ['a caught-on date below the MySQL DATE lower bound', { ...validValues, caughtOn: '0999-12-31' }],
     ['an invalid ISO date', { ...validValues, caughtOn: '2026-02-30' }],
     ['a blank location', { ...validValues, location: '  ' }],
     ['a location longer than 200 characters', { ...validValues, location: 'x'.repeat(201) }],

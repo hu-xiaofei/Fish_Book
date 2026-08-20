@@ -2,10 +2,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { PropsWithChildren } from 'react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
+import { deferred } from '../../../test/renderWithProviders';
 import { CURRENT_USER_QUERY_KEY } from '../../auth/api/currentUser';
+import { clearSessionScopedQueries } from '../../auth/api/sessionCache';
 import { catchDetailQueryKey, catchPageQueryKey } from '../api/catchRecordsApi';
 import { FAVORITES_QUERY_KEY } from '../../favorites/api/favoritesApi';
 import type { CatchRecordDetail, CatchRecordPage } from '../model/types';
@@ -45,9 +47,43 @@ const emptyCatchPage: CatchRecordPage = {
   items: [], page: 0, size: 20, totalItems: 0, totalPages: 0,
 };
 
+const userBCatchPage: CatchRecordPage = {
+  items: [{
+    id: 99, fishSlug: 'cyprinus-carpio', commonNameZh: '鲤', caughtOn: '2026-08-21',
+    location: '用户 B 的钓点', lengthCm: null, weightG: null, method: null,
+    hasPhoto: false, createdAt: '2026-08-21T08:00:00Z', updatedAt: '2026-08-21T08:00:00Z',
+  }],
+  page: 0, size: 20, totalItems: 1, totalPages: 1,
+};
+
 function LocationProbe() {
   const location = useLocation();
   return <output data-testid="location">{location.pathname}{location.search}</output>;
+}
+
+function AccountTransitionControl({ queryClient }: { queryClient: QueryClient }) {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        // Exercise the same cache-transition boundary used by completed logout and login.
+        clearSessionScopedQueries(queryClient);
+        clearSessionScopedQueries(queryClient);
+        queryClient.setQueryData(CURRENT_USER_QUERY_KEY, {
+          id: 2, email: 'user-b@example.com', nickname: 'User B', role: 'USER',
+        });
+        queryClient.setQueryData(catchPageQueryKey(0), userBCatchPage);
+        queryClient.setQueryData(catchDetailQueryKey(99), { ...savedCatch, id: 99, location: '用户 B 的钓点' });
+        queryClient.setQueryData([...FAVORITES_QUERY_KEY, 'status', 'cyprinus-carpio'], {
+          items: [{ fishSlug: 'cyprinus-carpio', favorited: true }],
+        });
+        navigate('/profile');
+      }}
+    >
+      完成退出并登录用户 B
+    </button>
+  );
 }
 
 function renderNewPage({
@@ -83,9 +119,10 @@ function renderNewPage({
     user: userEvent.setup(),
     ...render(
       <Routes>
-        <Route path="/catches/new" element={<><CatchNewPage /><LocationProbe /></>} />
+        <Route path="/catches/new" element={<><AccountTransitionControl queryClient={queryClient} /><CatchNewPage /><LocationProbe /></>} />
         <Route path="/catches/:id" element={<LocationProbe />} />
         <Route path="/login" element={<LocationProbe />} />
+        <Route path="/profile" element={<><h1>用户 B 个人资料</h1><LocationProbe /></>} />
       </Routes>,
       { wrapper: Wrapper },
     ),
@@ -211,4 +248,64 @@ test('confirmed catalog 401 clears private caches before rendering the login red
     .toBe(true);
   expect(queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY }).every(([, data]) => data === undefined))
     .toBe(true);
+});
+
+test('ignores user A create success after logout and user B login', async () => {
+  const saving = deferred<CatchRecordDetail>();
+  createCatchRecordMock.mockReturnValue(saving.promise);
+  const { user, queryClient } = renderNewPage();
+
+  await completeRequiredFields(user);
+  await user.click(screen.getByRole('button', { name: '保存记录' }));
+  await waitFor(() => expect(createCatchRecordMock).toHaveBeenCalledTimes(1));
+  await user.click(screen.getByRole('button', { name: '完成退出并登录用户 B' }));
+  expect(await screen.findByRole('heading', { name: '用户 B 个人资料' })).toBeInTheDocument();
+
+  saving.resolve(savedCatch);
+  await waitFor(() => expect(queryClient.getMutationCache().getAll().at(-1)?.state.status).toBe('success'));
+
+  expect(queryClient.getQueryData(catchDetailQueryKey(31))).toBeUndefined();
+  expect(queryClient.getQueryData(catchPageQueryKey(0))).toEqual(userBCatchPage);
+  expect(queryClient.getQueryState(catchPageQueryKey(0))?.isInvalidated).toBe(false);
+  expect(screen.getByTestId('location')).toHaveTextContent('/profile');
+});
+
+test('ignores user A create 401 after logout and user B login', async () => {
+  const saving = deferred<CatchRecordDetail>();
+  createCatchRecordMock.mockReturnValue(saving.promise);
+  const { user, queryClient } = renderNewPage();
+
+  await completeRequiredFields(user);
+  await user.click(screen.getByRole('button', { name: '保存记录' }));
+  await waitFor(() => expect(createCatchRecordMock).toHaveBeenCalledTimes(1));
+  await user.click(screen.getByRole('button', { name: '完成退出并登录用户 B' }));
+
+  saving.reject(new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED', message: '用户 A 会话已过期', fieldErrors: [], requestId: 'user-a-create',
+  }));
+  await waitFor(() => expect(queryClient.getMutationCache().getAll().at(-1)?.state.status).toBe('error'));
+
+  expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toMatchObject({ id: 2 });
+  expect(queryClient.getQueryData(catchPageQueryKey(0))).toEqual(userBCatchPage);
+  expect(queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY }).some(([, data]) => data !== undefined))
+    .toBe(true);
+  expect(screen.getByTestId('location')).toHaveTextContent('/profile');
+});
+
+test('stops create success side effects when the account changes during invalidation', async () => {
+  const invalidating = deferred<void>();
+  createCatchRecordMock.mockResolvedValue(savedCatch);
+  const { user, queryClient } = renderNewPage();
+  const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(invalidating.promise);
+
+  await completeRequiredFields(user);
+  await user.click(screen.getByRole('button', { name: '保存记录' }));
+  await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(1));
+  await user.click(screen.getByRole('button', { name: '完成退出并登录用户 B' }));
+
+  invalidating.resolve();
+  await waitFor(() => expect(queryClient.getMutationCache().getAll().at(-1)?.state.status).toBe('success'));
+
+  expect(queryClient.getQueryData(catchDetailQueryKey(31))).toBeUndefined();
+  expect(screen.getByTestId('location')).toHaveTextContent('/profile');
 });

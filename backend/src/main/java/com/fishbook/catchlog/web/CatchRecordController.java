@@ -50,21 +50,21 @@ public class CatchRecordController {
     }
 
     @GetMapping("/{id}")
-    CatchRecordDetailResponse get(Authentication authentication, @PathVariable long id) {
-        return CatchRecordDetailResponse.from(service.get(authentication.getName(), id));
+    CatchRecordDetailResponse get(Authentication authentication, @PathVariable String id) {
+        return CatchRecordDetailResponse.from(service.get(authentication.getName(), parseId(id)));
     }
 
     @PutMapping("/{id}")
     CatchRecordDetailResponse update(
-            Authentication authentication, @PathVariable long id, @RequestBody CatchRecordRequest request) {
+            Authentication authentication, @PathVariable String id, @RequestBody CatchRecordRequest request) {
         return CatchRecordDetailResponse.from(
-                service.update(authentication.getName(), id, request.toCommand()));
+                service.update(authentication.getName(), parseId(id), request.toCommand()));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void delete(Authentication authentication, @PathVariable long id) {
-        service.delete(authentication.getName(), id);
+    void delete(Authentication authentication, @PathVariable String id) {
+        service.delete(authentication.getName(), parseId(id));
     }
 
     private static int parsePage(String page) {
@@ -75,6 +75,14 @@ public class CatchRecordController {
             return Integer.parseInt(page);
         } catch (NumberFormatException exception) {
             throw new InvalidCatchRecordQueryException("page must be a non-negative integer");
+        }
+    }
+
+    private static long parseId(String id) {
+        try {
+            return Long.parseLong(id);
+        } catch (NumberFormatException exception) {
+            throw new InvalidCatchRecordQueryException("catch record ID must be an integer");
         }
     }
 }

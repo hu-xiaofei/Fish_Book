@@ -67,6 +67,19 @@ class CatchRecordTest {
     }
 
     @Test
+    void rejectsCaughtDatesBelowTheMySqlDateLowerBoundThroughEveryDomainEntryPoint() {
+        // Bug caught: a structurally valid Java LocalDate below MySQL DATE's range could reach persistence.
+        LocalDate belowMySqlDateRange = LocalDate.parse("0999-12-31");
+
+        assertThatThrownBy(() -> new CatchRecordDetails(
+                7L, belowMySqlDateRange, "城郊水库", null, null, null, null))
+                .isInstanceOf(InvalidCatchRecordException.class);
+        assertThatThrownBy(() -> CatchRecordDetails.validated(
+                7L, belowMySqlDateRange, "城郊水库", null, null, null, null, TODAY))
+                .isInstanceOf(InvalidCatchRecordException.class);
+    }
+
+    @Test
     void rejectsBlankAndOverlongLocation() {
         // Bug caught: empty or oversized required locations could violate input and column constraints.
         assertThatThrownBy(() -> validDetails(TODAY, "   ", null, null, null, null, TODAY))

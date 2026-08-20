@@ -13,8 +13,10 @@ public record CatchRecordDetails(
         String method,
         String notes) {
 
+    private static final LocalDate MIN_CAUGHT_ON = LocalDate.of(1000, 1, 1);
+
     public CatchRecordDetails {
-        if (fishId <= 0 || caughtOn == null) {
+        if (fishId <= 0 || caughtOn == null || caughtOn.isBefore(MIN_CAUGHT_ON)) {
             throw new InvalidCatchRecordException("fish and caught date must be valid");
         }
         location = requiredText(location, 200, "location");
@@ -29,7 +31,8 @@ public record CatchRecordDetails(
             BigDecimal lengthCm, BigDecimal weightG,
             String method, String notes, LocalDate today) {
         Objects.requireNonNull(today, "today must not be null");
-        if (fishId <= 0 || caughtOn == null || caughtOn.isAfter(today)) {
+        if (fishId <= 0 || caughtOn == null
+                || caughtOn.isBefore(MIN_CAUGHT_ON) || caughtOn.isAfter(today)) {
             throw new InvalidCatchRecordException("fish and caught date must be valid");
         }
         String normalizedLocation = requiredText(location, 200, "location");

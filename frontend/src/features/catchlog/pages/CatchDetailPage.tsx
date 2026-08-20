@@ -3,6 +3,10 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../../shared/api/ApiError';
 import { isConfirmedUnauthorized } from '../../auth/api/currentUser';
+import {
+  captureSessionGeneration,
+  isCurrentSessionGeneration,
+} from '../../auth/api/sessionCache';
 import { SessionNav } from '../../auth/components/SessionNav';
 import { useSessionExpiry } from '../../auth/hooks/useExpireSessionOnUnauthorized';
 import {
@@ -52,12 +56,16 @@ export function CatchDetailPage() {
   });
   const deleteMutation = useMutation({
     mutationFn: () => deleteCatchRecord(id as number),
-    onSuccess: async () => {
+    onMutate: () => ({ sessionGeneration: captureSessionGeneration() }),
+    onSuccess: async (_data, _variables, context) => {
+      if (!context || !isCurrentSessionGeneration(context.sessionGeneration)) return;
       queryClient.removeQueries({ queryKey: catchDetailQueryKey(id as number), exact: true });
       await queryClient.invalidateQueries({ queryKey: CATCHES_QUERY_KEY });
+      if (!isCurrentSessionGeneration(context.sessionGeneration)) return;
       navigate('/catches');
     },
-    onError: (error) => {
+    onError: (error, _variables, context) => {
+      if (!context || !isCurrentSessionGeneration(context.sessionGeneration)) return;
       if (expireIfUnauthorized(error)) return;
       setConfirmingDelete(false);
       setDeleteError(true);
