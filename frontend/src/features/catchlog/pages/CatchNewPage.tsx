@@ -45,7 +45,7 @@ export function CatchNewPage() {
     expireIfUnauthorized(catalogQuery.error);
   }, [catalogQuery.error, expireIfUnauthorized]);
 
-  if (sessionExpired || isConfirmedUnauthorized(catalogQuery.error) || isConfirmedUnauthorized(createMutation.error)) {
+  if (sessionExpired || isConfirmedUnauthorized(createMutation.error)) {
     return <Navigate to="/login" replace />;
   }
 

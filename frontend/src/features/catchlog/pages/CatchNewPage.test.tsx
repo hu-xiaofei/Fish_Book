@@ -7,6 +7,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
 import { CURRENT_USER_QUERY_KEY } from '../../auth/api/currentUser';
 import { catchDetailQueryKey, catchPageQueryKey } from '../api/catchRecordsApi';
+import { FAVORITES_QUERY_KEY } from '../../favorites/api/favoritesApi';
 import type { CatchRecordDetail, CatchRecordPage } from '../model/types';
 import { CatchNewPage } from './CatchNewPage';
 
@@ -64,6 +65,9 @@ function renderNewPage({
   if (cachedCatches) {
     queryClient.setQueryData(catchPageQueryKey(0), emptyCatchPage);
     queryClient.setQueryData(catchDetailQueryKey(30), { ...savedCatch, id: 30 });
+    queryClient.setQueryData([...FAVORITES_QUERY_KEY, 'status', 'channa-argus'], {
+      items: [{ fishSlug: 'channa-argus', favorited: true }],
+    });
   }
 
   function Wrapper({ children }: PropsWithChildren) {
@@ -191,5 +195,20 @@ test('confirmed save 401 clears private catch caches before routing to login', a
 
   await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/login'));
   expect(queryClient.getQueriesData({ queryKey: ['catches'] }).every(([, data]) => data === undefined))
+    .toBe(true);
+});
+
+test('confirmed catalog 401 clears private caches before rendering the login redirect', async () => {
+  fetchFishPageMock.mockRejectedValue(new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED', message: '请先登录', fieldErrors: [], requestId: 'test-request',
+  }));
+  const { queryClient } = renderNewPage({ cachedCatches: true });
+
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/login'));
+
+  expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toBeUndefined();
+  expect(queryClient.getQueriesData({ queryKey: ['catches'] }).every(([, data]) => data === undefined))
+    .toBe(true);
+  expect(queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY }).every(([, data]) => data === undefined))
     .toBe(true);
 });

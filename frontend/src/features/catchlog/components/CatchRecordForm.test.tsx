@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 import { deferred } from '../../../test/renderWithProviders';
@@ -114,4 +114,5 @@ test('disables duplicate submission while the save is pending', async () => {
   expect(onSubmit).toHaveBeenCalledTimes(1);
 
   saving.resolve();
+  await waitFor(() => expect(screen.getByRole('button', { name: '保存记录' })).toBeEnabled());
 });
