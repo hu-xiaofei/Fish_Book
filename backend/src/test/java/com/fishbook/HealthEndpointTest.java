@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fishbook.catalog.domain.FishRepository;
+import com.fishbook.catchlog.domain.CatchRecordRepository;
 import com.fishbook.favorites.domain.FavoriteRepository;
 import com.fishbook.identity.domain.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,9 @@ class HealthEndpointTest {
 
     @MockitoBean
     FavoriteRepository favoriteRepository;
+
+    @MockitoBean
+    CatchRecordRepository catchRecordRepository;
 
     @Autowired
     MockMvc mvc;
