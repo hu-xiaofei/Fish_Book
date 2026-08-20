@@ -6,6 +6,10 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
+import {
+  catchDetailQueryKey,
+  catchPageQueryKey,
+} from '../../catchlog/api/catchRecordsApi';
 import { FAVORITES_QUERY_KEY } from '../../favorites/api/favoritesApi';
 import { CURRENT_USER_QUERY_KEY } from '../api/currentUser';
 import { LoginPage } from './LoginPage';
@@ -64,6 +68,18 @@ function seedUserAFavorites(queryClient: QueryClient) {
   });
 }
 
+function seedUserACatches(queryClient: QueryClient) {
+  queryClient.setQueryData(catchPageQueryKey(0), {
+    items: [{ id: 31, fishSlug: 'user-a-fish' }],
+    page: 0,
+  });
+  queryClient.setQueryData(catchDetailQueryKey(31), {
+    id: 31,
+    fishSlug: 'user-a-fish',
+    notes: '仅用户 A 可见',
+  });
+}
+
 async function fillLoginForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('邮箱'), 'angler@example.com');
   await user.type(screen.getByLabelText('密码'), 'strong-pass');
@@ -92,7 +108,7 @@ test('successful login caches the user without browser storage', async () => {
   storageSpy.mockRestore();
 });
 
-test('successful account transition removes all prior-user favorite queries first', async () => {
+test('successful account transition removes all prior-user private record queries first', async () => {
   const priorUser = {
     id: 1,
     email: 'prior@example.com',
@@ -109,14 +125,18 @@ test('successful account transition removes all prior-user favorite queries firs
   const { user, queryClient } = renderLoginPage();
   queryClient.setQueryData(CURRENT_USER_QUERY_KEY, priorUser);
   seedUserAFavorites(queryClient);
-  let exposedPriorFavoritesToNextUser = false;
+  seedUserACatches(queryClient);
+  let exposedPriorPrivateDataToNextUser = false;
   const unsubscribe = queryClient.getQueryCache().subscribe(() => {
     const currentUser = queryClient.getQueryData<User>(CURRENT_USER_QUERY_KEY);
     const hasFavoriteData = queryClient
       .getQueriesData({ queryKey: FAVORITES_QUERY_KEY })
       .some(([, data]) => data !== undefined);
-    if (currentUser?.id === nextUser.id && hasFavoriteData) {
-      exposedPriorFavoritesToNextUser = true;
+    const hasCatchData = queryClient
+      .getQueriesData({ queryKey: ['catches'] })
+      .some(([, data]) => data !== undefined);
+    if (currentUser?.id === nextUser.id && (hasFavoriteData || hasCatchData)) {
+      exposedPriorPrivateDataToNextUser = true;
     }
   });
 
@@ -127,7 +147,8 @@ test('successful account transition removes all prior-user favorite queries firs
   unsubscribe();
   expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toEqual(nextUser);
   expect(queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY })).toEqual([]);
-  expect(exposedPriorFavoritesToNextUser).toBe(false);
+  expect(queryClient.getQueriesData({ queryKey: ['catches'] })).toEqual([]);
+  expect(exposedPriorPrivateDataToNextUser).toBe(false);
 });
 
 test('successful login returns to a same-origin path from the query string', async () => {

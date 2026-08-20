@@ -5,6 +5,10 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
+import {
+  catchDetailQueryKey,
+  catchPageQueryKey,
+} from '../../catchlog/api/catchRecordsApi';
 import { FAVORITES_QUERY_KEY } from '../../favorites/api/favoritesApi';
 import { CURRENT_USER_QUERY_KEY } from '../api/currentUser';
 import { SessionNav } from './SessionNav';
@@ -38,6 +42,18 @@ function seedUserFavorites(queryClient: QueryClient) {
   });
   queryClient.setQueryData([...FAVORITES_QUERY_KEY, 'status', 'user-a-fish'], {
     items: [{ fishSlug: 'user-a-fish', favorited: true }],
+  });
+}
+
+function seedUserCatches(queryClient: QueryClient) {
+  queryClient.setQueryData(catchPageQueryKey(0), {
+    items: [{ id: 31, fishSlug: 'user-a-fish' }],
+    page: 0,
+  });
+  queryClient.setQueryData(catchDetailQueryKey(31), {
+    id: 31,
+    fishSlug: 'user-a-fish',
+    notes: '仅用户 A 可见',
   });
 }
 
@@ -80,7 +96,7 @@ test('authenticated navigation includes favorites without advertising catches ea
   expect(screen.queryByRole('link', { name: /钓获/ })).not.toBeInTheDocument();
 });
 
-test('successful logout removes all favorite queries before current-user data', async () => {
+test('successful logout removes all private record queries before current-user data', async () => {
   const { queryClient, user } = renderSessionNav();
   fetchCurrentUserMock.mockRejectedValue(new ApiError(401, {
     code: 'AUTHENTICATION_REQUIRED',
@@ -89,14 +105,18 @@ test('successful logout removes all favorite queries before current-user data', 
     requestId: 'logout-session-ended',
   }));
   seedUserFavorites(queryClient);
-  let exposedFavoritesWithoutAUser = false;
+  seedUserCatches(queryClient);
+  let exposedPrivateDataWithoutAUser = false;
   const unsubscribe = queryClient.getQueryCache().subscribe(() => {
     const currentUser = queryClient.getQueryData(CURRENT_USER_QUERY_KEY);
     const hasFavoriteData = queryClient
       .getQueriesData({ queryKey: FAVORITES_QUERY_KEY })
       .some(([, data]) => data !== undefined);
-    if (currentUser === undefined && hasFavoriteData) {
-      exposedFavoritesWithoutAUser = true;
+    const hasCatchData = queryClient
+      .getQueriesData({ queryKey: ['catches'] })
+      .some(([, data]) => data !== undefined);
+    if (currentUser === undefined && (hasFavoriteData || hasCatchData)) {
+      exposedPrivateDataWithoutAUser = true;
     }
   });
 
@@ -106,13 +126,15 @@ test('successful logout removes all favorite queries before current-user data', 
   unsubscribe();
   expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toBeUndefined();
   expect(queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY })).toEqual([]);
-  expect(exposedFavoritesWithoutAUser).toBe(false);
+  expect(queryClient.getQueriesData({ queryKey: ['catches'] })).toEqual([]);
+  expect(exposedPrivateDataWithoutAUser).toBe(false);
 });
 
 test('failed logout retains current-user and favorite queries', async () => {
   logoutMock.mockRejectedValue(new Error('network unavailable'));
   const { queryClient, user } = renderSessionNav();
   seedUserFavorites(queryClient);
+  seedUserCatches(queryClient);
 
   await user.click(screen.getByRole('button', { name: '退出登录' }));
 
@@ -121,4 +143,5 @@ test('failed logout retains current-user and favorite queries', async () => {
   expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toEqual(authenticatedUser);
   expect(queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY }))
     .toHaveLength(2);
+  expect(queryClient.getQueriesData({ queryKey: ['catches'] })).toHaveLength(2);
 });
