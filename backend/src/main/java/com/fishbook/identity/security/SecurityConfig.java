@@ -107,6 +107,7 @@ public class SecurityConfig {
         RequestMatcher authenticationRequiredEndpoints = new OrRequestMatcher(
                 PathPatternRequestMatcher.pathPattern("/api/v1/me/**"),
                 PathPatternRequestMatcher.pathPattern("/api/v1/favorites/**"),
+                PathPatternRequestMatcher.pathPattern("/api/v1/catches/**"),
                 PathPatternRequestMatcher.pathPattern("/api/v1/auth/logout"));
         AccessDeniedHandler accessDeniedHandler = (request, response, exception) -> {
             if (exception instanceof CsrfException) {

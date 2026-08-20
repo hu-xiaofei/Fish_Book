@@ -2,6 +2,9 @@ package com.fishbook.common.error;
 
 import com.fishbook.catalog.application.InvalidCatalogQueryException;
 import com.fishbook.catalog.domain.FishNotFoundException;
+import com.fishbook.catchlog.application.InvalidCatchRecordQueryException;
+import com.fishbook.catchlog.domain.CatchRecordNotFoundException;
+import com.fishbook.catchlog.domain.InvalidCatchRecordException;
 import com.fishbook.favorites.application.InvalidFavoriteQueryException;
 import com.fishbook.identity.domain.DuplicateEmailException;
 import com.fishbook.identity.domain.InvalidEmailException;
@@ -51,6 +54,30 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST,
                 exception.code(),
                 "Favorite query is invalid",
+                List.of(),
+                request);
+    }
+
+    @ExceptionHandler({InvalidCatchRecordException.class, InvalidCatchRecordQueryException.class})
+    ResponseEntity<ApiErrorResponse> handleInvalidCatchRecord(
+            RuntimeException exception,
+            HttpServletRequest request) {
+        return error(
+                HttpStatus.BAD_REQUEST,
+                "INVALID_CATCH_RECORD",
+                "Catch record is invalid",
+                List.of(),
+                request);
+    }
+
+    @ExceptionHandler(CatchRecordNotFoundException.class)
+    ResponseEntity<ApiErrorResponse> handleCatchRecordNotFound(
+            CatchRecordNotFoundException exception,
+            HttpServletRequest request) {
+        return error(
+                HttpStatus.NOT_FOUND,
+                exception.code(),
+                "Catch record was not found",
                 List.of(),
                 request);
     }
