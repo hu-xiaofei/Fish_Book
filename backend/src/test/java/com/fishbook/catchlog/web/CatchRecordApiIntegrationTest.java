@@ -21,11 +21,14 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(MySqlTestConfiguration.class)
+// SecurityMockMvc csrf()/user() mutate the shared filter chain; do not leak it to later tests.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class CatchRecordApiIntegrationTest {
 
     private static final long USER_ID = 9401L;
