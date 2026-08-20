@@ -8,13 +8,13 @@
 
 ### 项目简介
 
-FishBook 是一个面向中国淡水鱼知识学习的全栈鱼类图鉴项目，也是一套用于练习真实软件工程流程的学习型应用。项目目前提供公开只读鱼类图鉴、完整的用户身份闭环和登录用户私有收藏，并通过同源部署将 React 前端与 Spring Boot API 统一运行在一个地址下。
+FishBook 是一个面向中国淡水鱼知识学习的全栈鱼类图鉴项目，也是一套用于练习真实软件工程流程的学习型应用。项目目前提供公开只读鱼类图鉴、完整的用户身份闭环、登录用户私有收藏和无照片钓获记录，并通过同源部署将 React 前端与 Spring Boot API 统一运行在一个地址下。
 
 当前版本收录 12 种经过整理的常见淡水鱼：鲫、鲤、草鱼、青鱼、鲢、鳙、乌鳢、鳜、黄颡鱼、团头鲂、翘嘴鲌和泥鳅。鱼类图片均保存在项目中，并记录来源、作者和许可证信息。
 
 ### 项目状态
 
-第一阶段个人产品闭环已经完成：用户可以注册并维护个人资料、浏览公开鱼类图鉴，并管理按账号隔离的私有收藏。下一阶段将围绕钓获记录展开，在不改变公开图鉴只读边界的前提下继续完善个人使用闭环。
+当前个人产品闭环已交付身份、公开图鉴、按账号隔离的私有收藏，以及无照片钓获记录的创建、查看、编辑和删除。下一里程碑将为既有记录加入由私有 MinIO 支撑的可选照片能力，同时保持公开图鉴的只读边界。
 
 ### 当前功能
 
@@ -42,7 +42,13 @@ FishBook 是一个面向中国淡水鱼知识学习的全栈鱼类图鉴项目�
 - “我的收藏”页面按用户隔离展示私有收藏，并支持分页和持久化取消收藏。
 - 重复收藏和重复取消收藏均采用幂等处理，不会产生重复数据。
 
-图鉴内容目前保持公开只读。管理员后台、图鉴新增与编辑、图片上传和钓获记录尚未实现，属于后续开发范围。
+**钓获记录（暂不含照片）**
+
+- 登录用户可以创建、查看、编辑和删除自己的钓获记录，并关联既有鱼种、日期、地点、长度、重量、钓法和备注。
+- “钓获记录”列表和详情均按账号隔离；访问其他用户的记录会得到统一的未找到结果。
+- 记录主体无需上传照片即可完成完整 CRUD 流程。
+
+图鉴内容目前保持公开只读。管理员后台、图鉴新增与编辑尚未实现；私有钓获照片上传、读取、替换和移除将作为下一里程碑开发。
 
 ### 技术栈
 
@@ -62,12 +68,12 @@ Node.js 版本固定为 `24.18.0`。前端和端到端测试依赖均通过各�
 ```text
 浏览器
   → Nginx + React 单页应用
-  → Spring Boot API
+  → Spring Boot API（identity、catalog、favorites、catchlog）
   → MySQL
 ```
 
 - Nginx 在 `http://localhost:8080` 提供前端，并将 `/api` 和 `/actuator` 转发到内部后端服务。
-- Spring Boot 按领域、应用、持久化和 Web 边界组织用户、图鉴与收藏功能。
+- Spring Boot 按领域、应用、持久化和 Web 边界组织 identity、catalog、favorites 与 catchlog 功能。
 - Flyway 管理数据库表结构和首批鱼类数据迁移。
 - Spring Session 将登录会话保存到 MySQL。
 - MinIO 已作为未来对象存储基础设施运行；当前图鉴图片是经过授权核验、由前端同源提供的本地静态资源。
@@ -111,6 +117,8 @@ docker compose -f compose.yaml -f compose.full.yaml down
 | 登录 | [http://localhost:8080/login](http://localhost:8080/login) |
 | 个人资料 | [http://localhost:8080/profile](http://localhost:8080/profile) |
 | 我的收藏 | [http://localhost:8080/favorites](http://localhost:8080/favorites) |
+| 钓获记录 | [http://localhost:8080/catches](http://localhost:8080/catches) |
+| 新建钓获记录 | [http://localhost:8080/catches/new](http://localhost:8080/catches/new) |
 | 健康检查 | [http://localhost:8080/actuator/health](http://localhost:8080/actuator/health) |
 
 ### 测试与验证
@@ -125,7 +133,7 @@ cd .. && docker compose --env-file .env.example -f compose.yaml -f compose.full.
 ```
 
 - 后端测试使用 Testcontainers 启动真实 MySQL，因此需要 Docker 正在运行。
-- Playwright 测试需要先通过完整 Docker Compose 命令启动应用，并覆盖身份、公开图鉴和私有收藏主流程。
+- Playwright 测试需要先通过完整 Docker Compose 命令启动应用，并覆盖身份、公开图鉴、私有收藏和无照片钓获记录主流程。
 - 以上是与 CI 覆盖范围一致的本地验证流程。GitHub Actions 会在推送到 `main` 和 Pull Request 时执行后端、前端、Docker 与端到端测试；Linux CI 还会使用 Maven 批处理模式、安装 Playwright 系统依赖，并在端到端测试前启动和等待完整服务栈。
 
 ### 项目结构
@@ -142,10 +150,9 @@ Fish_Book/
 
 ### 当前范围与后续方向
 
-当前交付已包含稳定的身份系统、公开只读图鉴和登录用户私有收藏。下一阶段可以继续开发：
+当前交付已包含稳定的身份系统、公开只读图鉴、登录用户私有收藏，以及无照片钓获记录 CRUD。下一阶段可以继续开发：
 
-- 钓获记录的创建、查看、编辑和删除；
-- 由 MinIO 支撑的可选私有钓获照片；
+- 由 MinIO 支撑的可选私有钓获照片上传、读取、替换和移除；
 - 管理员账号初始化和基于角色的权限控制；
 - 鱼类新增、编辑、发布和下架。
 
@@ -168,13 +175,13 @@ Fish_Book/
 
 ### Overview
 
-FishBook is a learning-oriented full-stack fish encyclopedia focused on Chinese freshwater fish and on practicing a realistic software engineering workflow. The current application provides a public read-only fish catalog, a complete identity flow, and private favorites for authenticated users, with the React frontend and Spring Boot API served from the same origin.
+FishBook is a learning-oriented full-stack fish encyclopedia focused on Chinese freshwater fish and on practicing a realistic software engineering workflow. The current application provides a public read-only fish catalog, a complete identity flow, private favorites, and no-photo catch records for authenticated users, with the React frontend and Spring Boot API served from the same origin.
 
 The catalog currently contains 12 curated freshwater species: crucian carp, common carp, grass carp, black carp, silver carp, bighead carp, northern snakehead, mandarin fish, yellow catfish, Wuchang bream, topmouth culter, and weather loach. Every catalog image is stored locally with recorded source, author, and license metadata.
 
 ### Project Status
 
-The first personal-product milestone is complete: users can register and maintain a profile, browse the public fish catalog, and manage account-isolated private favorites. The next milestone focuses on catch records while preserving the public catalog's read-only boundary.
+The current personal-product loop delivers identity, a public catalog, account-isolated private favorites, and no-photo catch-record creation, viewing, editing, and deletion. The next milestone adds optional private MinIO-backed photos to existing records while preserving the public catalog's read-only boundary.
 
 ### Current Features
 
@@ -202,7 +209,13 @@ The first personal-product milestone is complete: users can register and maintai
 - The “My Favorites” page keeps each user's favorites private and supports pagination and persistent removal.
 - Repeated add and remove requests are idempotent and do not create duplicate data.
 
-Catalog content remains read-only. The admin management UI, catalog writes, image uploads, and catch records are not implemented yet and remain future work.
+**Catch records (without photos)**
+
+- Authenticated users can create, view, edit, and delete their own catch records, linked to an existing fish species with date, location, length, weight, method, and notes.
+- Catch lists and details are account-isolated; another user's record produces the same not-found state as a missing record.
+- The complete record CRUD flow does not require a photo.
+
+Catalog content remains read-only. The admin management UI and catalog writes are not implemented; private catch-photo upload, retrieval, replacement, and removal are the next milestone.
 
 ### Tech Stack
 
@@ -222,12 +235,12 @@ Node.js is pinned to `24.18.0`. Frontend and end-to-end dependencies are locked 
 ```text
 Browser
   → Nginx + React SPA
-  → Spring Boot API
+  → Spring Boot API (identity, catalog, favorites, catchlog)
   → MySQL
 ```
 
 - Nginx serves the frontend at `http://localhost:8080` and proxies `/api` and `/actuator` to the internal backend service.
-- Spring Boot separates the identity, catalog, and favorites features across domain, application, persistence, and Web boundaries.
+- Spring Boot separates the identity, catalog, favorites, and catchlog features across domain, application, persistence, and Web boundaries.
 - Flyway owns database schema and initial catalog-data migrations.
 - Spring Session stores authenticated sessions in MySQL.
 - MinIO is provisioned as infrastructure for future object storage. Current catalog images are audited local static assets served by the frontend from the same origin.
@@ -271,6 +284,8 @@ docker compose -f compose.yaml -f compose.full.yaml down
 | Login | [http://localhost:8080/login](http://localhost:8080/login) |
 | Profile | [http://localhost:8080/profile](http://localhost:8080/profile) |
 | My Favorites | [http://localhost:8080/favorites](http://localhost:8080/favorites) |
+| Catch records | [http://localhost:8080/catches](http://localhost:8080/catches) |
+| New catch record | [http://localhost:8080/catches/new](http://localhost:8080/catches/new) |
 | Health endpoint | [http://localhost:8080/actuator/health](http://localhost:8080/actuator/health) |
 
 ### Tests and Verification
@@ -285,7 +300,7 @@ cd .. && docker compose --env-file .env.example -f compose.yaml -f compose.full.
 ```
 
 - Backend tests use Testcontainers with a real MySQL instance, so Docker must be running.
-- Playwright requires the full application stack to be running first and covers the identity, public-catalog, and private-favorites flows.
+- Playwright requires the full application stack to be running first and covers the identity, public-catalog, private-favorites, and no-photo catch-record flows.
 - The commands above are the local equivalent of the CI verification scope. GitHub Actions runs backend, frontend, Docker, and end-to-end checks for pushes to `main` and for pull requests; Linux CI additionally uses Maven batch mode, installs Playwright system dependencies, and starts and waits for the full stack before the end-to-end tests.
 
 ### Project Structure
@@ -302,10 +317,9 @@ Fish_Book/
 
 ### Current Scope and Next Steps
 
-The current delivery includes a stable identity system, a public read-only catalog, and private favorites for authenticated users. Natural next steps include:
+The current delivery includes a stable identity system, a public read-only catalog, private favorites, and no-photo catch-record CRUD for authenticated users. Natural next steps include:
 
-- create, view, edit, and delete catch records;
-- optional private catch photos backed by MinIO;
+- optional private MinIO-backed catch-photo upload, retrieval, replacement, and removal;
 - administrator bootstrap and role-based authorization;
 - create, edit, publish, and unpublish catalog workflows.
 
