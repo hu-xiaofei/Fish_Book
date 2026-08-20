@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { expect, test } from 'vitest';
 import { catchDetailQueryKey, catchPageQueryKey } from '../../catchlog/api/catchRecordsApi';
 import { ApiError } from '../../../shared/api/ApiError';
-import { useFavoriteSessionExpiry } from './useExpireSessionOnUnauthorized';
+import { useSessionExpiry } from './useExpireSessionOnUnauthorized';
 
 const sessionExpiredError = new ApiError(401, {
   code: 'AUTHENTICATION_REQUIRED',
@@ -21,7 +21,7 @@ test('removes catch cache before rendering sessionExpired after a confirmed 401'
 
   function ExpiryProbe() {
     const cache = useQueryClient();
-    const { expireIfUnauthorized, sessionExpired } = useFavoriteSessionExpiry();
+    const { expireIfUnauthorized, sessionExpired } = useSessionExpiry();
     useEffect(() => {
       expireIfUnauthorized(sessionExpiredError);
     }, [expireIfUnauthorized]);

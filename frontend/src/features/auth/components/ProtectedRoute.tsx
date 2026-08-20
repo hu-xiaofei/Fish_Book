@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { ApiError } from '../../../shared/api/ApiError';
 import {
   currentUserQueryConfig,
@@ -12,6 +12,7 @@ type ProtectedRouteProps = {
 };
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
+  const location = useLocation();
   const currentUser = useQuery({
     ...currentUserQueryConfig,
     queryFn: fetchCurrentUser,
@@ -27,7 +28,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (currentUser.isError) {
     if (currentUser.error instanceof ApiError && currentUser.error.status === 401) {
-      return <Navigate to="/login" replace />;
+      const returnTo = `${location.pathname}${location.search}${location.hash}`;
+      return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
     }
 
     return <p role="status">暂时无法确认登录状态，请稍后重试</p>;

@@ -89,11 +89,11 @@ beforeEach(() => {
   logoutMock.mockResolvedValue(undefined);
 });
 
-test('authenticated navigation includes favorites without advertising catches early', () => {
+test('authenticated navigation includes personal favorites and catch records', () => {
   renderSessionNav();
 
   expect(screen.getByRole('link', { name: '我的收藏' })).toHaveAttribute('href', '/favorites');
-  expect(screen.queryByRole('link', { name: /钓获/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '钓获记录' })).toHaveAttribute('href', '/catches');
 });
 
 test('successful logout removes all private record queries before current-user data', async () => {

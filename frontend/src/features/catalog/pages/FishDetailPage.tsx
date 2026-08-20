@@ -9,7 +9,7 @@ import {
   isConfirmedUnauthorized,
 } from '../../auth/api/currentUser';
 import { useConfirmedUnauthorizedSession } from '../../auth/hooks/useConfirmedUnauthorizedSession';
-import { useFavoriteSessionExpiry } from '../../auth/hooks/useExpireSessionOnUnauthorized';
+import { useSessionExpiry } from '../../auth/hooks/useExpireSessionOnUnauthorized';
 import {
   favoriteStatusQueryKey,
   favoriteStatusQueryRetry,
@@ -49,7 +49,7 @@ export function FishDetailPage() {
     queryFn: fetchCurrentUser,
   });
   const currentUserUnauthorized = useConfirmedUnauthorizedSession(currentUser.error);
-  const { sessionExpired, expireIfUnauthorized } = useFavoriteSessionExpiry();
+  const { sessionExpired, expireIfUnauthorized } = useSessionExpiry();
   const hasAuthenticatedSession = !sessionExpired && hasUsableCurrentUser(
     currentUser.data,
     currentUser.error,

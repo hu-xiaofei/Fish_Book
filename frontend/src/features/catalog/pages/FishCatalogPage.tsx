@@ -9,7 +9,7 @@ import {
 } from '../../auth/api/currentUser';
 import { SessionNav } from '../../auth/components/SessionNav';
 import { useConfirmedUnauthorizedSession } from '../../auth/hooks/useConfirmedUnauthorizedSession';
-import { useFavoriteSessionExpiry } from '../../auth/hooks/useExpireSessionOnUnauthorized';
+import { useSessionExpiry } from '../../auth/hooks/useExpireSessionOnUnauthorized';
 import {
   favoriteStatusQueryKey,
   favoriteStatusQueryRetry,
@@ -43,7 +43,7 @@ export function FishCatalogPage() {
     queryKey: fishListQueryKey(filters),
     queryFn: () => fetchFishPage(filters),
   });
-  const { sessionExpired, expireIfUnauthorized } = useFavoriteSessionExpiry();
+  const { sessionExpired, expireIfUnauthorized } = useSessionExpiry();
   const currentUser = useQuery({
     ...currentUserQueryConfig,
     queryFn: fetchCurrentUser,

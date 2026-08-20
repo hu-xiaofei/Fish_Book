@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitForElementToBeRemoved } from '@testing-library/react';
 import type { PropsWithChildren } from 'react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
@@ -42,10 +42,15 @@ function renderProtectedProfile() {
           </ProtectedRoute>
         )}
       />
-      <Route path="/login" element={<h1>登录</h1>} />
+      <Route path="/login" element={<><h1>登录</h1><LocationProbe /></>} />
     </Routes>,
     { wrapper: Wrapper },
   );
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname}{location.search}</output>;
 }
 
 beforeEach(() => {
@@ -68,6 +73,7 @@ test('protected route waits for session lookup before redirecting', async () => 
   }));
 
   expect(await screen.findByText('登录')).toBeInTheDocument();
+  expect(screen.getByTestId('location')).toHaveTextContent('/login?returnTo=%2Fprofile');
   expect(currentUserMock).toHaveBeenCalledTimes(1);
 });
 

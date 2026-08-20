@@ -5,6 +5,7 @@ import { ProfilePage } from '../features/auth/pages/ProfilePage';
 import { RegisterPage } from '../features/auth/pages/RegisterPage';
 import { FishDetailPage } from '../features/catalog/pages/FishDetailPage';
 import { FavoritesPage } from '../features/favorites/pages/FavoritesPage';
+import { CatchListPage } from '../features/catchlog/pages/CatchListPage';
 import { App } from './App';
 
 export const router = createBrowserRouter([
@@ -37,6 +38,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <FavoritesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/catches',
+    element: (
+      <ProtectedRoute>
+        <CatchListPage />
       </ProtectedRoute>
     ),
   },
