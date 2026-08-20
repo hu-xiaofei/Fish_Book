@@ -1,0 +1,247 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { PropsWithChildren } from 'react';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { beforeEach, expect, test, vi } from 'vitest';
+import { ApiError } from '../../../shared/api/ApiError';
+import { CURRENT_USER_QUERY_KEY } from '../../auth/api/currentUser';
+import { FAVORITES_QUERY_KEY } from '../../favorites/api/favoritesApi';
+import {
+  catchDetailQueryKey,
+  catchPageQueryKey,
+} from '../api/catchRecordsApi';
+import type { CatchRecordDetail, CatchRecordPage } from '../model/types';
+import { CatchDetailPage } from './CatchDetailPage';
+
+const { deleteCatchRecordMock, fetchCatchRecordMock } = vi.hoisted(() => ({
+  deleteCatchRecordMock: vi.fn(),
+  fetchCatchRecordMock: vi.fn(),
+}));
+
+vi.mock('../api/catchRecordsApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/catchRecordsApi')>();
+  return {
+    ...actual,
+    deleteCatchRecord: deleteCatchRecordMock,
+    fetchCatchRecord: fetchCatchRecordMock,
+  };
+});
+
+const savedCatch: CatchRecordDetail = {
+  id: 31,
+  fishSlug: 'channa-argus',
+  commonNameZh: '乌鳢',
+  caughtOn: '2026-08-20',
+  location: '城郊水库',
+  lengthCm: 42.5,
+  weightG: 1350,
+  method: '路亚',
+  notes: '傍晚近岸中鱼',
+  hasPhoto: false,
+  createdAt: '2026-08-20T08:00:00Z',
+  updatedAt: '2026-08-20T09:00:00Z',
+};
+
+const savedSummary = {
+  id: savedCatch.id,
+  fishSlug: savedCatch.fishSlug,
+  commonNameZh: savedCatch.commonNameZh,
+  caughtOn: savedCatch.caughtOn,
+  location: savedCatch.location,
+  lengthCm: savedCatch.lengthCm,
+  weightG: savedCatch.weightG,
+  method: savedCatch.method,
+  hasPhoto: savedCatch.hasPhoto,
+  createdAt: savedCatch.createdAt,
+  updatedAt: savedCatch.updatedAt,
+};
+
+const cachedPage: CatchRecordPage = {
+  items: [savedSummary],
+  page: 0,
+  size: 20,
+  totalItems: 1,
+  totalPages: 1,
+};
+
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname}</output>;
+}
+
+function renderCatchDetail({
+  initialEntry = '/catches/31',
+  cachedPrivateData = false,
+}: {
+  initialEntry?: string;
+  cachedPrivateData?: boolean;
+} = {}) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, retryDelay: 0 },
+      mutations: { retry: false },
+    },
+  });
+  queryClient.setQueryData(CURRENT_USER_QUERY_KEY, {
+    id: 1, email: 'angler@example.com', nickname: 'River', role: 'USER',
+  });
+  if (cachedPrivateData) {
+    queryClient.setQueryData(catchPageQueryKey(0), cachedPage);
+    queryClient.setQueryData(catchDetailQueryKey(30), { ...savedCatch, id: 30 });
+    queryClient.setQueryData(FAVORITES_QUERY_KEY, { items: [{ fishSlug: 'channa-argus' }] });
+  }
+
+  function Wrapper({ children }: PropsWithChildren) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[initialEntry]}>{children}</MemoryRouter>
+      </QueryClientProvider>
+    );
+  }
+
+  return {
+    queryClient,
+    user: userEvent.setup(),
+    ...render(
+      <Routes>
+        <Route path="/catches/:id" element={<><CatchDetailPage /><LocationProbe /></>} />
+        <Route path="/catches" element={<><h1>钓获记录</h1><LocationProbe /></>} />
+        <Route path="/login" element={<LocationProbe />} />
+        <Route path="/catches/:id/edit" element={<LocationProbe />} />
+      </Routes>,
+      { wrapper: Wrapper },
+    ),
+  };
+}
+
+function notFoundError() {
+  return new ApiError(404, {
+    code: 'CATCH_RECORD_NOT_FOUND', message: 'record does not exist', fieldErrors: [], requestId: 'test-request',
+  });
+}
+
+beforeEach(() => {
+  deleteCatchRecordMock.mockReset();
+  fetchCatchRecordMock.mockReset();
+  fetchCatchRecordMock.mockResolvedValue(savedCatch);
+});
+
+test('shows all saved fields and the no-photo state', async () => {
+  renderCatchDetail();
+
+  expect(await screen.findByRole('heading', { name: '乌鳢钓获记录' })).toBeInTheDocument();
+  expect(screen.getByText('城郊水库')).toBeInTheDocument();
+  expect(screen.getByText('2026-08-20')).toBeInTheDocument();
+  expect(screen.getByText('42.5 cm · 1350 g')).toBeInTheDocument();
+  expect(screen.getByText('路亚')).toBeInTheDocument();
+  expect(screen.getByText('傍晚近岸中鱼')).toBeInTheDocument();
+  expect(screen.getByText('尚未添加照片')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '编辑记录' })).toHaveAttribute('href', '/catches/31/edit');
+});
+
+test('renders empty optional fields without inventing measurements or notes', async () => {
+  fetchCatchRecordMock.mockResolvedValue({
+    ...savedCatch,
+    lengthCm: null,
+    weightG: null,
+    method: null,
+    notes: null,
+  });
+  renderCatchDetail();
+
+  expect(await screen.findByText('未记录尺寸')).toBeInTheDocument();
+  expect(screen.getAllByText('未记录').length).toBeGreaterThanOrEqual(2);
+});
+
+test('shows loading while the private record is pending', () => {
+  fetchCatchRecordMock.mockImplementation(() => new Promise(() => undefined));
+  renderCatchDetail();
+
+  expect(screen.getByText('正在加载钓获记录…')).toHaveAttribute('role', 'status');
+});
+
+test('shows a safe error and retries the detail query', async () => {
+  fetchCatchRecordMock
+    .mockRejectedValueOnce(new Error('database unavailable at db.internal'))
+    .mockRejectedValueOnce(new Error('database unavailable at db.internal'))
+    .mockRejectedValueOnce(new Error('database unavailable at db.internal'))
+    .mockResolvedValueOnce(savedCatch);
+  const { user } = renderCatchDetail();
+
+  const status = await screen.findByText('加载钓获记录失败，请稍后重试');
+  expect(status).not.toHaveTextContent('db.internal');
+  await user.click(screen.getByRole('button', { name: '重试' }));
+
+  expect(await screen.findByRole('heading', { name: '乌鳢钓获记录' })).toBeInTheDocument();
+  expect(fetchCatchRecordMock).toHaveBeenCalledTimes(4);
+});
+
+test('handles malformed IDs and owned-record 404s as the same safe missing state', async () => {
+  const malformed = renderCatchDetail({ initialEntry: '/catches/not-a-number' });
+  expect(await screen.findByRole('heading', { name: '没有找到钓获记录' })).toBeInTheDocument();
+  expect(fetchCatchRecordMock).not.toHaveBeenCalled();
+  malformed.unmount();
+
+  fetchCatchRecordMock.mockRejectedValue(notFoundError());
+  renderCatchDetail();
+  expect(await screen.findByRole('heading', { name: '没有找到钓获记录' })).toBeInTheDocument();
+});
+
+test('requires an explicit confirmation before deleting', async () => {
+  deleteCatchRecordMock.mockResolvedValue(undefined);
+  const { user, queryClient } = renderCatchDetail({ cachedPrivateData: true });
+
+  await user.click(await screen.findByRole('button', { name: '删除记录' }));
+  expect(deleteCatchRecordMock).not.toHaveBeenCalled();
+  expect(screen.getByRole('alertdialog', { name: '确认删除钓获记录' })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '确认删除' }));
+
+  await waitFor(() => expect(deleteCatchRecordMock).toHaveBeenCalledWith(31));
+  expect(await screen.findByTestId('location')).toHaveTextContent('/catches');
+  expect(queryClient.getQueryData(catchDetailQueryKey(31))).toBeUndefined();
+  expect(queryClient.getQueryState(catchPageQueryKey(0))?.isInvalidated).toBe(true);
+});
+
+test('cancels deletion without changing the private record', async () => {
+  const { user } = renderCatchDetail();
+
+  await user.click(await screen.findByRole('button', { name: '删除记录' }));
+  await user.click(screen.getByRole('button', { name: '取消' }));
+
+  expect(deleteCatchRecordMock).not.toHaveBeenCalled();
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '乌鳢钓获记录' })).toBeInTheDocument();
+});
+
+test('keeps the record visible after a failed delete and offers a safe retry', async () => {
+  deleteCatchRecordMock
+    .mockRejectedValueOnce(new Error('delete failed at mysql.internal'))
+    .mockResolvedValueOnce(undefined);
+  const { user } = renderCatchDetail();
+
+  await user.click(await screen.findByRole('button', { name: '删除记录' }));
+  await user.click(screen.getByRole('button', { name: '确认删除' }));
+
+  const status = await screen.findByText('删除记录失败，请稍后重试');
+  expect(status).not.toHaveTextContent('mysql.internal');
+  expect(screen.getByRole('heading', { name: '乌鳢钓获记录' })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '重试删除' }));
+  expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '确认删除' }));
+  await waitFor(() => expect(deleteCatchRecordMock).toHaveBeenCalledTimes(2));
+});
+
+test('confirmed detail 401 clears private caches before routing to login', async () => {
+  fetchCatchRecordMock.mockRejectedValue(new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED', message: '请先登录', fieldErrors: [], requestId: 'test-request',
+  }));
+  const { queryClient } = renderCatchDetail({ cachedPrivateData: true });
+
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/login'));
+  expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toBeUndefined();
+  expect(queryClient.getQueriesData({ queryKey: ['catches'] }).every(([, data]) => data === undefined))
+    .toBe(true);
+  expect(queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY }).every(([, data]) => data === undefined))
+    .toBe(true);
+});

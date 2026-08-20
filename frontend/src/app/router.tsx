@@ -7,6 +7,8 @@ import { FishDetailPage } from '../features/catalog/pages/FishDetailPage';
 import { FavoritesPage } from '../features/favorites/pages/FavoritesPage';
 import { CatchListPage } from '../features/catchlog/pages/CatchListPage';
 import { CatchNewPage } from '../features/catchlog/pages/CatchNewPage';
+import { CatchDetailPage } from '../features/catchlog/pages/CatchDetailPage';
+import { CatchEditPage } from '../features/catchlog/pages/CatchEditPage';
 import { App } from './App';
 
 export const router = createBrowserRouter([
@@ -55,6 +57,22 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <CatchNewPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/catches/:id/edit',
+    element: (
+      <ProtectedRoute>
+        <CatchEditPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/catches/:id',
+    element: (
+      <ProtectedRoute>
+        <CatchDetailPage />
       </ProtectedRoute>
     ),
   },
