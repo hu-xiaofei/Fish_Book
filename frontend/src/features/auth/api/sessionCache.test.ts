@@ -5,7 +5,7 @@ import { ApiError } from '../../../shared/api/ApiError';
 import { CURRENT_USER_QUERY_KEY } from './currentUser';
 import { expireSessionOnUnauthorized } from './sessionCache';
 
-test('a confirmed session expiry removes catch pages and details before resetting the user', () => {
+test('a confirmed session expiry removes catch pages and details before removing the user', () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClient.setQueryData(CURRENT_USER_QUERY_KEY, { id: 1, nickname: 'Prior' });
   queryClient.setQueryData(catchPageQueryKey(0), { items: [{ id: 31 }] });

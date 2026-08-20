@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { CatchRecordFormValues, CatchRecordInput } from './types';
 
 const canonicalFishSlug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const decimalLiteral = /^-?\d+(?:\.\d+)?$/;
 
 function isIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -11,24 +12,38 @@ function isIsoDate(value: string): boolean {
 }
 
 function optionalMeasurement(max: number) {
-  return z.preprocess(
-    (value) => {
+  return z.union([z.string(), z.number(), z.null(), z.undefined()])
+    .transform((value, context) => {
       if (value === null || value === undefined) return null;
-      if (typeof value === 'string') {
-        return value.trim() === '' ? null : Number(value);
+
+      const literal = typeof value === 'string' ? value.trim() : String(value);
+      if (literal === '') return null;
+      if (!decimalLiteral.test(literal)) {
+        context.addIssue({ code: 'custom', message: '请输入普通十进制数值' });
+        return z.NEVER;
       }
-      return value;
-    },
-    z.number()
-      .finite('请输入有效数值')
-      .min(0, '数值不能小于 0')
-      .max(max, '数值超出可记录范围')
-      .refine(
-        (value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-7,
-        '最多保留两位小数',
-      )
-      .nullable(),
-  );
+
+      const fraction = literal.split('.')[1] ?? '';
+      if (fraction.replace(/0+$/, '').length > 2) {
+        context.addIssue({ code: 'custom', message: '最多保留两位小数' });
+        return z.NEVER;
+      }
+
+      const numericValue = Number(literal);
+      if (!Number.isFinite(numericValue)) {
+        context.addIssue({ code: 'custom', message: '请输入有效数值' });
+        return z.NEVER;
+      }
+      if (numericValue < 0) {
+        context.addIssue({ code: 'custom', message: '数值不能小于 0' });
+        return z.NEVER;
+      }
+      if (numericValue > max) {
+        context.addIssue({ code: 'custom', message: '数值超出可记录范围' });
+        return z.NEVER;
+      }
+      return numericValue;
+    });
 }
 
 export function catchRecordFormSchema(today: string) {

@@ -18,11 +18,6 @@ export function expireSessionOnUnauthorized(
 ): boolean {
   if (!isConfirmedUnauthorized(error)) return false;
 
-  queryClient.removeQueries({ queryKey: CATCHES_QUERY_KEY });
-  queryClient.removeQueries({ queryKey: FAVORITES_QUERY_KEY });
-  void queryClient.resetQueries({
-    queryKey: CURRENT_USER_QUERY_KEY,
-    exact: true,
-  });
+  clearSessionScopedQueries(queryClient);
   return true;
 }

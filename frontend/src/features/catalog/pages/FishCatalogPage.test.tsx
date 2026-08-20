@@ -6,6 +6,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
 import { deferred } from '../../../test/renderWithProviders';
+import { catchDetailQueryKey, catchPageQueryKey } from '../../catchlog/api/catchRecordsApi';
 import { CURRENT_USER_QUERY_KEY } from '../../auth/api/currentUser';
 import {
   FAVORITES_QUERY_KEY,
@@ -282,21 +283,25 @@ test('favorite status 401 expires a fresh cached session and clears private stat
     false,
     authenticatedUser,
     Date.now(),
-    (client) => client.setQueryData(
-      statusKey,
-      { items: [{ fishSlug: 'channa-argus', favorited: true }] },
-      { updatedAt: 1 },
-    ),
+    (client) => {
+      client.setQueryData(
+        statusKey,
+        { items: [{ fishSlug: 'channa-argus', favorited: true }] },
+        { updatedAt: 1 },
+      );
+      client.setQueryData(catchPageQueryKey(0), { items: [{ id: 31 }] });
+      client.setQueryData(catchDetailQueryKey(31), { id: 31, notes: '仅用户 A 可见' });
+    },
   );
 
   expect(await screen.findByRole('link', { name: '登录' })).toBeInTheDocument();
   expect(fetchFavoriteStatusesMock).toHaveBeenCalledTimes(1);
-  expect(fetchCurrentUserMock).toHaveBeenCalledTimes(1);
   expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toBeUndefined();
   expect(
     queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY })
       .every(([, data]) => data === undefined),
   ).toBe(true);
+  expect(queryClient.getQueriesData({ queryKey: ['catches'] })).toEqual([]);
   expect(screen.queryByRole('button', { name: '取消收藏' })).not.toBeInTheDocument();
 });
 

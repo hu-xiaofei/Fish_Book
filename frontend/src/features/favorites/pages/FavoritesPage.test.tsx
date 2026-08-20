@@ -7,6 +7,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../../shared/api/ApiError';
 import type { User } from '../../../shared/api/types';
 import { deferred } from '../../../test/renderWithProviders';
+import { catchDetailQueryKey, catchPageQueryKey } from '../../catchlog/api/catchRecordsApi';
 import { CURRENT_USER_QUERY_KEY } from '../../auth/api/currentUser';
 import { ProtectedRoute } from '../../auth/components/ProtectedRoute';
 import {
@@ -73,6 +74,7 @@ function renderFavorites({
   cachedUser,
   cachedUserUpdatedAt = 1,
   cachedFavoritePage,
+  prepareQueryClient,
 }: {
   initialEntry?: string;
   protectedRoute?: boolean;
@@ -80,6 +82,7 @@ function renderFavorites({
   cachedUser?: User;
   cachedUserUpdatedAt?: number;
   cachedFavoritePage?: FavoritePage;
+  prepareQueryClient?: (queryClient: QueryClient) => void;
 } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -104,6 +107,7 @@ function renderFavorites({
       { updatedAt: 1 },
     );
   }
+  prepareQueryClient?.(queryClient);
 
   function Wrapper({ children }: PropsWithChildren) {
     return (
@@ -336,15 +340,20 @@ test('favorites page 401 expires a fresh session and redirects without private c
     cachedUser: authenticatedUser,
     cachedUserUpdatedAt: Date.now(),
     cachedFavoritePage: populatedPage,
+    prepareQueryClient: (client) => {
+      client.setQueryData(catchPageQueryKey(0), { items: [{ id: 31 }] });
+      client.setQueryData(catchDetailQueryKey(31), { id: 31, notes: '仅用户 A 可见' });
+    },
   });
 
   expect(await screen.findByRole('heading', { name: '登录' })).toBeInTheDocument();
   expect(fetchFavoritePageMock).toHaveBeenCalledTimes(1);
-  expect(fetchCurrentUserMock).toHaveBeenCalledTimes(1);
+  expect(fetchCurrentUserMock).not.toHaveBeenCalled();
   expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toBeUndefined();
   expect(
     queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY })
       .every(([, data]) => data === undefined),
   ).toBe(true);
+  expect(queryClient.getQueriesData({ queryKey: ['catches'] })).toEqual([]);
   expect(screen.queryByRole('heading', { name: '乌鳢' })).not.toBeInTheDocument();
 });

@@ -77,12 +77,45 @@ describe('catch record form parsing', () => {
     expect(() => parseCatchForm(values, '2026-08-20')).toThrow(z.ZodError);
   });
 
-  test('derives today in Asia/Shanghai rather than the browser local zone', () => {
+  test.each([
+    ['length with a tiny non-zero fractional tail', 'lengthCm', '1.0000000001'],
+    ['length with a non-zero tail after trailing zeros', 'lengthCm', '42.5000000001'],
+    ['length smaller than one hundredth but non-zero', 'lengthCm', '0.0000000001'],
+    ['weight with a tiny non-zero fractional tail', 'weightG', '1.0000000001'],
+    ['a scientific-notation length literal', 'lengthCm', '1e2'],
+    ['a non-finite length', 'lengthCm', Number.NaN],
+    ['a non-finite weight', 'weightG', Number.POSITIVE_INFINITY],
+  ] as const)('rejects %s', (_description, field, value) => {
+    expect(() => parseCatchForm({ ...validValues, [field]: value }, '2026-08-20'))
+      .toThrow(z.ZodError);
+  });
+
+  test('allows insignificant trailing zeros within the two-decimal storage scale', () => {
+    expect(parseCatchForm({
+      ...validValues,
+      lengthCm: '42.5000',
+      weightG: '0.000',
+    }, '2026-08-20')).toMatchObject({ lengthCm: 42.5, weightG: 0 });
+  });
+
+  test('derives today in Asia/Shanghai when the browser local zone is UTC', () => {
+    const originalTimeZone = process.env.TZ;
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-08-20T16:30:00.000Z'));
+    try {
+      process.env.TZ = 'UTC';
+      vi.setSystemTime(new Date('2026-08-20T16:30:00.000Z'));
 
-    expect(todayInShanghai()).toBe('2026-08-21');
-
-    vi.useRealTimers();
+      const local = new Date();
+      expect(`${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`)
+        .toBe('2026-08-20');
+      expect(todayInShanghai()).toBe('2026-08-21');
+    } finally {
+      if (originalTimeZone === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = originalTimeZone;
+      }
+      vi.useRealTimers();
+    }
   });
 });
