@@ -8,6 +8,7 @@ import com.fishbook.catalog.application.FishPageView;
 import com.fishbook.catalog.application.FishReferenceView;
 import com.fishbook.catalog.application.FishSummaryView;
 import com.fishbook.catalog.application.HabitatOptionView;
+import com.fishbook.catalog.domain.FishNotFoundException;
 import com.fishbook.catchlog.domain.CatchRecord;
 import com.fishbook.catchlog.domain.CatchRecordDetails;
 import com.fishbook.catchlog.domain.CatchRecordNotFoundException;
@@ -34,6 +35,8 @@ class DefaultCatchRecordApplicationServiceTest {
 
     private static final Clock CLOCK = Clock.fixed(
             Instant.parse("2026-08-20T02:00:00Z"), ZoneId.of("Asia/Shanghai"));
+    private static final Clock SHANGHAI_BOUNDARY_CLOCK = Clock.fixed(
+            Instant.parse("2026-08-19T16:30:00Z"), ZoneId.of("UTC"));
 
     private RecordingProfileService profiles;
     private RecordingCatalogService catalog;
@@ -91,6 +94,7 @@ class DefaultCatchRecordApplicationServiceTest {
         assertThat(repository.lastListUserId).isEqualTo(41L);
         assertThat(repository.lastPage).isEqualTo(1);
         assertThat(repository.lastSize).isEqualTo(20);
+        assertThat(catalog.summaryLookupCount).isEqualTo(1);
         assertThat(catalog.lastSummaryIds).containsExactly(2L, 1L);
         assertThat(page.items()).extracting(
                 CatchRecordSummaryView::id,
@@ -116,12 +120,19 @@ class DefaultCatchRecordApplicationServiceTest {
     }
 
     @Test
-    void rejectsDatesAfterTodayInShanghai() {
-        assertThatThrownBy(() -> service.create("angler@example.com",
+    void usesTheShanghaiDateAtTheUtcDayBoundaryForFutureDateValidation() {
+        CatchRecordApplicationService boundaryService = new DefaultCatchRecordApplicationService(
+                profiles, catalog, repository, SHANGHAI_BOUNDARY_CLOCK);
+
+        boundaryService.create("angler@example.com",
+                command("channa-argus", LocalDate.parse("2026-08-20"), "城郊水库"));
+
+        assertThat(repository.saved.details().caughtOn()).isEqualTo(LocalDate.parse("2026-08-20"));
+        assertThatThrownBy(() -> boundaryService.create("angler@example.com",
                 command("channa-argus", LocalDate.parse("2026-08-21"), "城郊水库")))
                 .isInstanceOfSatisfying(InvalidCatchRecordException.class,
                         error -> assertThat(error.code()).isEqualTo("INVALID_CATCH_RECORD"));
-        assertThat(repository.saved).isNull();
+        assertThat(repository.saved.details().caughtOn()).isEqualTo(LocalDate.parse("2026-08-20"));
     }
 
     @Test
@@ -172,6 +183,15 @@ class DefaultCatchRecordApplicationServiceTest {
         assertThat(repository.saved).isNull();
     }
 
+    @Test
+    void preservesFishNotFoundForACanonicalButMissingFishSlug() {
+        assertThatThrownBy(() -> service.create("angler@example.com",
+                command("missing-fish", LocalDate.parse("2026-08-20"), "城郊水库")))
+                .isInstanceOfSatisfying(FishNotFoundException.class,
+                        error -> assertThat(error.code()).isEqualTo("FISH_NOT_FOUND"));
+        assertThat(repository.saved).isNull();
+    }
+
     private static CatchRecordCommand command(String fishSlug, LocalDate caughtOn, String location) {
         return new CatchRecordCommand(fishSlug, caughtOn, location,
                 new BigDecimal("42.5"), new BigDecimal("1350"), " 路亚 ", " 傍晚近岸中鱼 ");
@@ -208,6 +228,7 @@ class DefaultCatchRecordApplicationServiceTest {
                 1L, summary("channa-argus", "乌鳢"),
                 2L, summary("cyprinus-carpio", "鲤"));
         private List<Long> lastSummaryIds = List.of();
+        private int summaryLookupCount;
         private int referenceLookupCount;
 
         @Override public FishPageView search(FishCatalogQuery query) { throw new UnsupportedOperationException(); }
@@ -216,6 +237,9 @@ class DefaultCatchRecordApplicationServiceTest {
         @Override
         public FishReferenceView getReferenceBySlug(String slug) {
             referenceLookupCount++;
+            if ("missing-fish".equals(slug)) {
+                throw new FishNotFoundException(slug);
+            }
             return references.get(slug);
         }
 
@@ -223,6 +247,7 @@ class DefaultCatchRecordApplicationServiceTest {
 
         @Override
         public List<FishSummaryView> getSummariesByIds(List<Long> ids) {
+            summaryLookupCount++;
             lastSummaryIds = List.copyOf(ids);
             return ids.stream().map(summaries::get).toList();
         }
