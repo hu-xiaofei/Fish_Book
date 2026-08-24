@@ -8,13 +8,13 @@
 
 ### 项目简介
 
-FishBook 是一个面向中国淡水鱼知识学习的全栈鱼类图鉴项目，也是一套用于练习真实软件工程流程的学习型应用。项目目前提供公开只读鱼类图鉴、完整的用户身份闭环、登录用户私有收藏和无照片钓获记录，并通过同源部署将 React 前端与 Spring Boot API 统一运行在一个地址下。
+FishBook 是一个面向中国淡水鱼知识学习的全栈鱼类图鉴项目，也是一套用于练习真实软件工程流程的学习型应用。项目目前提供公开只读鱼类图鉴、完整的用户身份闭环、登录用户私有收藏，以及带可选私有照片的钓获记录，并通过同源部署将 React 前端与 Spring Boot API 统一运行在一个地址下。
 
 当前版本收录 12 种经过整理的常见淡水鱼：鲫、鲤、草鱼、青鱼、鲢、鳙、乌鳢、鳜、黄颡鱼、团头鲂、翘嘴鲌和泥鳅。鱼类图片均保存在项目中，并记录来源、作者和许可证信息。
 
 ### 项目状态
 
-当前个人产品闭环已交付身份、公开图鉴、按账号隔离的私有收藏，以及无照片钓获记录的创建、查看、编辑和删除。下一里程碑将为既有记录加入由私有 MinIO 支撑的可选照片能力，同时保持公开图鉴的只读边界。
+当前个人产品闭环已交付身份、公开图鉴、按账号隔离的私有收藏，以及带可选私有照片的钓获记录。照片由私有 MinIO 存储，上传、读取、替换和移除都受记录所有权校验，同时保持公开图鉴的只读边界。
 
 ### 当前功能
 
@@ -42,13 +42,15 @@ FishBook 是一个面向中国淡水鱼知识学习的全栈鱼类图鉴项目�
 - “我的收藏”页面按用户隔离展示私有收藏，并支持分页和持久化取消收藏。
 - 重复收藏和重复取消收藏均采用幂等处理，不会产生重复数据。
 
-**钓获记录（暂不含照片）**
+**钓获记录与私有照片**
 
 - 登录用户可以创建、查看、编辑和删除自己的钓获记录，并关联既有鱼种、日期、地点、长度、重量、钓法和备注。
 - “钓获记录”列表和详情均按账号隔离；访问其他用户的记录会得到统一的未找到结果。
-- 记录主体无需上传照片即可完成完整 CRUD 流程。
+- 每条记录可选上传一张不超过 10 MiB 的 JPEG、PNG 或 WebP 照片，并可在详情页替换或移除。
+- 照片仅通过需要登录且校验所有权的后端接口读取；不存在的照片和其他用户的照片都返回统一的未找到结果。
+- 新建时照片上传失败不会撤销已经保存的记录，用户可在详情页重试。
 
-图鉴内容目前保持公开只读。管理员后台、图鉴新增与编辑尚未实现；私有钓获照片上传、读取、替换和移除将作为下一里程碑开发。
+图鉴内容目前保持公开只读。管理员后台、图鉴新增与编辑尚未实现。
 
 ### 技术栈
 
@@ -69,14 +71,16 @@ Node.js 版本固定为 `24.18.0`。前端和端到端测试依赖均通过各�
 浏览器
   → Nginx + React 单页应用
   → Spring Boot API（identity、catalog、favorites、catchlog）
-  → MySQL
+      → MySQL（业务数据、会话、媒体清理任务）
+      → MinIO（私有钓获照片）
 ```
 
 - Nginx 在 `http://localhost:8080` 提供前端，并将 `/api` 和 `/actuator` 转发到内部后端服务。
 - Spring Boot 按领域、应用、持久化和 Web 边界组织 identity、catalog、favorites 与 catchlog 功能。
 - Flyway 管理数据库表结构和首批鱼类数据迁移。
 - Spring Session 将登录会话保存到 MySQL。
-- MinIO 已作为未来对象存储基础设施运行；当前图鉴图片是经过授权核验、由前端同源提供的本地静态资源。
+- MinIO 保存按用户和记录隔离的私有钓获照片；浏览器不能依赖公开对象地址，只能通过所有者鉴权后的后端接口读取。
+- 图鉴图片仍是经过授权核验、由前端同源提供的公开本地静态资源。
 
 ### 快速开始
 
@@ -133,7 +137,7 @@ cd .. && docker compose --env-file .env.example -f compose.yaml -f compose.full.
 ```
 
 - 后端测试使用 Testcontainers 启动真实 MySQL，因此需要 Docker 正在运行。
-- Playwright 测试需要先通过完整 Docker Compose 命令启动应用，并覆盖身份、公开图鉴、私有收藏和无照片钓获记录主流程。
+- Playwright 测试需要先通过完整 Docker Compose 命令启动应用，并覆盖身份、公开图鉴、私有收藏、钓获记录，以及私有照片上传、隔离、替换和移除主流程。
 - 以上是与 CI 覆盖范围一致的本地验证流程。GitHub Actions 会在推送到 `main` 和 Pull Request 时执行后端、前端、Docker 与端到端测试；Linux CI 还会使用 Maven 批处理模式、安装 Playwright 系统依赖，并在端到端测试前启动和等待完整服务栈。
 
 ### 项目结构
@@ -150,11 +154,11 @@ Fish_Book/
 
 ### 当前范围与后续方向
 
-当前交付已包含稳定的身份系统、公开只读图鉴、登录用户私有收藏，以及无照片钓获记录 CRUD。下一阶段可以继续开发：
+当前交付已包含稳定的身份系统、公开只读图鉴、登录用户私有收藏，以及带可选私有照片的钓获记录 CRUD。下一阶段可以继续开发：
 
-- 由 MinIO 支撑的可选私有钓获照片上传、读取、替换和移除；
 - 管理员账号初始化和基于角色的权限控制；
-- 鱼类新增、编辑、发布和下架。
+- 鱼类新增、编辑、发布和下架；
+- 私有媒体备份、容量监控和运维告警。
 
 仓库目前没有项目级应用许可证文件，因此不要据此推断应用代码的开源授权。鱼类图片使用各自的开放许可证，详情见图片来源记录。
 
@@ -166,6 +170,7 @@ Fish_Book/
 - [鱼类图鉴核心设计规格](docs/superpowers/specs/2026-08-11-fish-catalog-core-design.md)
 - [个人产品闭环设计规格](docs/superpowers/specs/2026-08-14-personal-product-loop-design.md)
 - [个人收藏实施计划](docs/superpowers/plans/2026-08-14-personal-favorites.md)
+- [私有钓获照片实施计划](docs/superpowers/plans/2026-08-14-catch-photo-media.md)
 
 ---
 
@@ -175,13 +180,13 @@ Fish_Book/
 
 ### Overview
 
-FishBook is a learning-oriented full-stack fish encyclopedia focused on Chinese freshwater fish and on practicing a realistic software engineering workflow. The current application provides a public read-only fish catalog, a complete identity flow, private favorites, and no-photo catch records for authenticated users, with the React frontend and Spring Boot API served from the same origin.
+FishBook is a learning-oriented full-stack fish encyclopedia focused on Chinese freshwater fish and on practicing a realistic software engineering workflow. The current application provides a public read-only fish catalog, a complete identity flow, private favorites, and catch records with optional private photos, with the React frontend and Spring Boot API served from the same origin.
 
 The catalog currently contains 12 curated freshwater species: crucian carp, common carp, grass carp, black carp, silver carp, bighead carp, northern snakehead, mandarin fish, yellow catfish, Wuchang bream, topmouth culter, and weather loach. Every catalog image is stored locally with recorded source, author, and license metadata.
 
 ### Project Status
 
-The current personal-product loop delivers identity, a public catalog, account-isolated private favorites, and no-photo catch-record creation, viewing, editing, and deletion. The next milestone adds optional private MinIO-backed photos to existing records while preserving the public catalog's read-only boundary.
+The current personal-product loop delivers identity, a public catalog, account-isolated private favorites, and catch records with optional private photos. Photos are stored in a private MinIO bucket, and upload, retrieval, replacement, and removal all enforce record ownership while preserving the public catalog's read-only boundary.
 
 ### Current Features
 
@@ -209,13 +214,15 @@ The current personal-product loop delivers identity, a public catalog, account-i
 - The “My Favorites” page keeps each user's favorites private and supports pagination and persistent removal.
 - Repeated add and remove requests are idempotent and do not create duplicate data.
 
-**Catch records (without photos)**
+**Catch records and private photos**
 
 - Authenticated users can create, view, edit, and delete their own catch records, linked to an existing fish species with date, location, length, weight, method, and notes.
 - Catch lists and details are account-isolated; another user's record produces the same not-found state as a missing record.
-- The complete record CRUD flow does not require a photo.
+- Each record can optionally hold one JPEG, PNG, or WebP photo up to 10 MiB, which can be replaced or removed from the detail page.
+- Photos are retrieved only through an authenticated, owner-scoped backend endpoint; missing and foreign-owned photos return the same not-found result.
+- A photo upload failure during creation does not roll back the saved record, so the user can retry from its detail page.
 
-Catalog content remains read-only. The admin management UI and catalog writes are not implemented; private catch-photo upload, retrieval, replacement, and removal are the next milestone.
+Catalog content remains read-only. The admin management UI and catalog writes are not implemented.
 
 ### Tech Stack
 
@@ -236,14 +243,16 @@ Node.js is pinned to `24.18.0`. Frontend and end-to-end dependencies are locked 
 Browser
   → Nginx + React SPA
   → Spring Boot API (identity, catalog, favorites, catchlog)
-  → MySQL
+      → MySQL (business data, sessions, and media-cleanup jobs)
+      → MinIO (private catch photos)
 ```
 
 - Nginx serves the frontend at `http://localhost:8080` and proxies `/api` and `/actuator` to the internal backend service.
 - Spring Boot separates the identity, catalog, favorites, and catchlog features across domain, application, persistence, and Web boundaries.
 - Flyway owns database schema and initial catalog-data migrations.
 - Spring Session stores authenticated sessions in MySQL.
-- MinIO is provisioned as infrastructure for future object storage. Current catalog images are audited local static assets served by the frontend from the same origin.
+- MinIO stores private catch photos under user- and record-scoped keys. Browsers do not rely on public object URLs and retrieve photos only through the owner-authorized backend endpoint.
+- Catalog images remain audited public static assets served locally by the frontend from the same origin.
 
 ### Quick Start
 
@@ -300,7 +309,7 @@ cd .. && docker compose --env-file .env.example -f compose.yaml -f compose.full.
 ```
 
 - Backend tests use Testcontainers with a real MySQL instance, so Docker must be running.
-- Playwright requires the full application stack to be running first and covers the identity, public-catalog, private-favorites, and no-photo catch-record flows.
+- Playwright requires the full application stack to be running first and covers identity, the public catalog, private favorites, catch records, and private-photo upload, isolation, replacement, and removal.
 - The commands above are the local equivalent of the CI verification scope. GitHub Actions runs backend, frontend, Docker, and end-to-end checks for pushes to `main` and for pull requests; Linux CI additionally uses Maven batch mode, installs Playwright system dependencies, and starts and waits for the full stack before the end-to-end tests.
 
 ### Project Structure
@@ -317,11 +326,11 @@ Fish_Book/
 
 ### Current Scope and Next Steps
 
-The current delivery includes a stable identity system, a public read-only catalog, private favorites, and no-photo catch-record CRUD for authenticated users. Natural next steps include:
+The current delivery includes a stable identity system, a public read-only catalog, private favorites, and catch-record CRUD with optional private photos. Natural next steps include:
 
-- optional private MinIO-backed catch-photo upload, retrieval, replacement, and removal;
 - administrator bootstrap and role-based authorization;
-- create, edit, publish, and unpublish catalog workflows.
+- create, edit, publish, and unpublish catalog workflows;
+- private-media backup, capacity monitoring, and operational alerts.
 
 The repository does not currently contain a project-level application license file, so no open-source license should be inferred for the application code. Fish images retain their individual open licenses; see the attribution record for details.
 
@@ -333,3 +342,4 @@ The repository does not currently contain a project-level application license fi
 - [Fish catalog core design specification](docs/superpowers/specs/2026-08-11-fish-catalog-core-design.md)
 - [Personal product-loop design specification](docs/superpowers/specs/2026-08-14-personal-product-loop-design.md)
 - [Personal favorites implementation plan](docs/superpowers/plans/2026-08-14-personal-favorites.md)
+- [Private catch-photo implementation plan](docs/superpowers/plans/2026-08-14-catch-photo-media.md)

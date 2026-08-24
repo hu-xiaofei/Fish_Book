@@ -13,7 +13,7 @@ test -f .env || cp .env.example .env
 docker compose -f compose.yaml -f compose.full.yaml up -d --build
 ```
 
-Keep `.env` local. Do not commit its development credentials. Wait until `docker compose -f compose.yaml -f compose.full.yaml ps` reports MySQL and the backend as healthy, then open `http://localhost:8080`.
+Keep `.env` local. Do not commit its development credentials. Wait until `docker compose -f compose.yaml -f compose.full.yaml ps` reports MySQL, MinIO, and the backend as healthy, then open `http://localhost:8080`.
 
 ## Normal Start and Stop
 
@@ -62,6 +62,7 @@ Follow all logs, or narrow the output to one service:
 docker compose -f compose.yaml -f compose.full.yaml logs --tail=200 -f
 docker compose -f compose.yaml -f compose.full.yaml logs --tail=200 -f backend
 docker compose -f compose.yaml -f compose.full.yaml logs --tail=200 -f mysql
+docker compose -f compose.yaml -f compose.full.yaml logs --tail=200 -f minio
 ```
 
 Press `Ctrl-C` to stop following logs; the containers continue running.
@@ -87,6 +88,66 @@ docker compose -f compose.yaml -f compose.full.yaml logs --tail=300 backend mysq
 ```
 
 For a migration failure, use the Flyway diagnosis below and confirm V3 and V4 appear once in `flyway_schema_history` before retrying the smoke checks.
+
+## Private Catch-Photo Storage
+
+The full Compose stack enables private media and maps these local settings into the backend:
+
+| `.env` setting | Backend setting | Purpose |
+| --- | --- | --- |
+| `MINIO_ROOT_USER` | `FISHBOOK_MEDIA_ACCESS_KEY` | Local MinIO access key |
+| `MINIO_ROOT_PASSWORD` | `FISHBOOK_MEDIA_SECRET_KEY` | Local MinIO secret key |
+| `MINIO_BUCKET` | `FISHBOOK_MEDIA_BUCKET` | Private object bucket |
+| — | `FISHBOOK_MEDIA_ENDPOINT=http://minio:9000` | Container-network endpoint |
+| — | `FISHBOOK_MEDIA_ENABLED=true` | Enables the MinIO adapter and cleanup worker |
+
+When the backend runs directly with the `local` profile, its default endpoint is `http://localhost:9000`; the MinIO credentials and bucket fall back to the matching `.env` names. Override the `FISHBOOK_MEDIA_*` variables when using another local endpoint. Media is disabled by default outside the local profile so unit and slice tests do not silently depend on object storage.
+
+At startup the backend checks for the configured bucket and creates it if absent. Keep that bucket private: do not add anonymous download policies or expose object URLs to the browser. If media is enabled but MinIO, its credentials, or bucket initialization is unavailable, backend startup fails instead of starting with an unusable media boundary.
+
+Each catch record accepts at most one JPEG, PNG, or WebP photo up to 10 MiB. All endpoints require an authenticated record owner:
+
+| Method and endpoint | Behavior |
+| --- | --- |
+| `PUT /api/v1/catches/{id}/photo` | Uploads or replaces multipart field `photo`; returns `204` |
+| `GET /api/v1/catches/{id}/photo` | Returns private binary content with `Cache-Control: private` |
+| `DELETE /api/v1/catches/{id}/photo` | Removes the current photo metadata; returns `204` |
+
+A missing record, absent photo, and another user's photo all return the same `404` photo-not-found response. Invalid type, signature, or size returns `400`; a storage outage during a direct upload or read returns `503`. During record creation, a failed optional upload does not roll back the saved record, and the detail page offers a retry.
+
+## Inspect Media Cleanup Safely
+
+Replacing or removing a photo, or deleting its catch record, commits the database change and a cleanup job in one transaction. The worker processes at most 20 due jobs each minute. Failures use exponential backoff and become `FAILED` after eight attempts; a successful object deletion removes its job row. Cleanup failure never restores a photo to the UI.
+
+Open the MySQL client as described below and inspect job metadata without selecting private object keys:
+
+```sql
+SELECT id, reason, status, attempt_count, next_attempt_at, last_attempt_at, created_at
+FROM media_cleanup_jobs
+ORDER BY id DESC;
+```
+
+`PENDING` means deletion will be retried. `FAILED` requires operator investigation of MinIO availability and credentials before a controlled retry or cleanup. Normal backend warnings identify only the job ID, reason, attempt count, and error class; they intentionally omit private object keys.
+
+For an orphan audit, work only in a trusted local terminal. Compare the object listing with both live record references and queued cleanup references:
+
+```sql
+SELECT id, user_id, photo_object_key
+FROM catch_records
+WHERE photo_object_key IS NOT NULL
+ORDER BY id;
+
+SELECT id, status, object_key
+FROM media_cleanup_jobs
+ORDER BY id;
+```
+
+```bash
+docker compose -f compose.yaml -f compose.full.yaml exec minio \
+  sh -c 'MC_HOST_local="http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000" mc ls --recursive local/"$MINIO_BUCKET"'
+```
+
+Treat keys referenced by `catch_records` as live and keys referenced by `media_cleanup_jobs` as awaiting or requiring cleanup. An object is an orphan candidate only when it appears in neither query. Recheck both tables immediately before deleting any candidate, retain a backup when recovery matters, and never paste object keys or command output into shared logs, issues, or chat.
 
 ## Diagnose Flyway Failures
 
@@ -161,4 +222,4 @@ cd ../e2e && npm ci && npx playwright install chromium && npm test
 cd .. && docker compose -f compose.yaml -f compose.full.yaml config --quiet
 ```
 
-The Playwright acceptance test uses the UI only. It proves registration, login, JDBC-backed session restoration after reload, nickname persistence, logout, and protected-route redirection.
+The Playwright acceptance suite proves registration, login, JDBC-backed session restoration after reload, nickname persistence, logout, protected-route redirection, the public catalog, private favorites, catch-record CRUD, and private-photo upload, owner isolation, reload, replacement, and removal.
