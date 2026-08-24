@@ -18,6 +18,10 @@ public record CatchRecord(
         if (userId <= 0 || (id != null && id <= 0)) {
             throw new IllegalArgumentException("record and user IDs must be positive");
         }
+        if (photoObjectKey != null
+                && (photoObjectKey.isBlank() || photoObjectKey.length() > 512)) {
+            throw new IllegalArgumentException("photo object key must contain 1 to 512 characters");
+        }
     }
 
     public static CatchRecord create(long userId, CatchRecordDetails details, Instant now) {
@@ -32,5 +36,13 @@ public record CatchRecord(
 
     public CatchRecord update(CatchRecordDetails next, Instant now) {
         return new CatchRecord(id, userId, next, photoObjectKey, createdAt, now);
+    }
+
+    public CatchRecord withPhotoObjectKey(String objectKey, Instant now) {
+        return new CatchRecord(id, userId, details, objectKey, createdAt, now);
+    }
+
+    public CatchRecord withoutPhoto(Instant now) {
+        return new CatchRecord(id, userId, details, null, createdAt, now);
     }
 }

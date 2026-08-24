@@ -17,6 +17,12 @@ import com.fishbook.catchlog.domain.CatchRecordRepository;
 import com.fishbook.catchlog.domain.InvalidCatchRecordException;
 import com.fishbook.identity.application.ProfileApplicationService;
 import com.fishbook.identity.application.UserView;
+import com.fishbook.media.cleanup.MediaCleanupJob;
+import com.fishbook.media.cleanup.MediaCleanupJobRepository;
+import com.fishbook.media.cleanup.MediaCleanupReason;
+import com.fishbook.media.cleanup.MediaCleanupService;
+import com.fishbook.media.domain.MediaStore;
+import com.fishbook.media.domain.StoredMedia;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -41,6 +47,7 @@ class DefaultCatchRecordApplicationServiceTest {
     private RecordingProfileService profiles;
     private RecordingCatalogService catalog;
     private RecordingCatchRecordRepository repository;
+    private RecordingCleanupRepository cleanupJobs;
     private CatchRecordApplicationService service;
 
     @BeforeEach
@@ -48,7 +55,9 @@ class DefaultCatchRecordApplicationServiceTest {
         profiles = new RecordingProfileService();
         catalog = new RecordingCatalogService();
         repository = new RecordingCatchRecordRepository();
-        service = new DefaultCatchRecordApplicationService(profiles, catalog, repository, CLOCK);
+        cleanupJobs = new RecordingCleanupRepository();
+        service = new DefaultCatchRecordApplicationService(
+                profiles, catalog, repository, cleanupService(cleanupJobs), CLOCK);
     }
 
     @Test
@@ -122,7 +131,7 @@ class DefaultCatchRecordApplicationServiceTest {
     @Test
     void usesTheShanghaiDateAtTheUtcDayBoundaryForFutureDateValidation() {
         CatchRecordApplicationService boundaryService = new DefaultCatchRecordApplicationService(
-                profiles, catalog, repository, SHANGHAI_BOUNDARY_CLOCK);
+                profiles, catalog, repository, cleanupService(cleanupJobs), SHANGHAI_BOUNDARY_CLOCK);
 
         boundaryService.create("angler@example.com",
                 command("channa-argus", LocalDate.parse("2026-08-20"), "城郊水库"));
@@ -174,6 +183,20 @@ class DefaultCatchRecordApplicationServiceTest {
     }
 
     @Test
+    void deletingARecordEnqueuesItsPhotoForCleanupInTheSameOperation() {
+        repository.ownedRecord = Optional.of(record(
+                31L, 1L, LocalDate.parse("2026-08-20"), "catches/41/31/current"));
+
+        service.delete("angler@example.com", 31L);
+
+        assertThat(cleanupJobs.enqueued).singleElement().satisfies(job -> {
+            assertThat(job.objectKey()).isEqualTo("catches/41/31/current");
+            assertThat(job.reason()).isEqualTo(MediaCleanupReason.RECORD_DELETED);
+            assertThat(job.createdAt()).isEqualTo(CLOCK.instant());
+        });
+    }
+
+    @Test
     void rejectsNonCanonicalFishSlugsAsCatchInputBeforeCatalogLookupOrSaving() {
         assertThatThrownBy(() -> service.create("angler@example.com",
                 command("Channa_argus", LocalDate.parse("2026-08-20"), "城郊水库")))
@@ -203,6 +226,16 @@ class DefaultCatchRecordApplicationServiceTest {
                         new BigDecimal("1350"), "路亚", "傍晚近岸中鱼"),
                 photoObjectKey, Instant.parse("2026-08-19T12:00:00Z"),
                 Instant.parse("2026-08-19T12:00:00Z"));
+    }
+
+    private static MediaCleanupService cleanupService(RecordingCleanupRepository repository) {
+        return new MediaCleanupService(repository, new MediaStore() {
+            @Override public void put(String key, byte[] content, String contentType) {
+                throw new UnsupportedOperationException();
+            }
+            @Override public StoredMedia get(String key) { throw new UnsupportedOperationException(); }
+            @Override public void delete(String key) { throw new UnsupportedOperationException(); }
+        }, CLOCK);
     }
 
     private static final class RecordingProfileService implements ProfileApplicationService {
@@ -302,5 +335,28 @@ class DefaultCatchRecordApplicationServiceTest {
             deletedUserId = userId;
             return deleteResult;
         }
+    }
+
+    private static final class RecordingCleanupRepository implements MediaCleanupJobRepository {
+        private final List<MediaCleanupJob> enqueued = new java.util.ArrayList<>();
+
+        @Override
+        public MediaCleanupJob enqueue(String objectKey, MediaCleanupReason reason, Instant now) {
+            var job = new MediaCleanupJob(
+                    (long) enqueued.size() + 1,
+                    objectKey,
+                    reason,
+                    com.fishbook.media.cleanup.MediaCleanupStatus.PENDING,
+                    0,
+                    now,
+                    null,
+                    now);
+            enqueued.add(job);
+            return job;
+        }
+
+        @Override public List<MediaCleanupJob> findDue(Instant now, int limit) { return List.of(); }
+        @Override public void save(MediaCleanupJob job) { throw new UnsupportedOperationException(); }
+        @Override public void delete(long jobId) { throw new UnsupportedOperationException(); }
     }
 }

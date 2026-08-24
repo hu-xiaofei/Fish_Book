@@ -159,6 +159,31 @@ class CatchRecordTest {
     }
 
     @Test
+    void swapsAndClearsPhotoKeysWithoutChangingRecordOwnershipOrDetails() {
+        CatchRecord original = CatchRecord.restore(
+                12L, 9L, validDetails(TODAY, null, null, TODAY),
+                null, CREATED_AT, UPDATED_AT);
+        Instant photoUpdatedAt = Instant.parse("2026-08-20T12:15:30Z");
+
+        CatchRecord withPhoto = original.withPhotoObjectKey(
+                "catches/9/12/opaque", photoUpdatedAt);
+        CatchRecord withoutPhoto = withPhoto.withoutPhoto(photoUpdatedAt.plusSeconds(1));
+
+        assertThat(withPhoto).extracting(
+                CatchRecord::id,
+                CatchRecord::userId,
+                CatchRecord::details,
+                CatchRecord::photoObjectKey,
+                CatchRecord::createdAt,
+                CatchRecord::updatedAt)
+                .containsExactly(
+                        12L, 9L, original.details(), "catches/9/12/opaque",
+                        CREATED_AT, photoUpdatedAt);
+        assertThat(withoutPhoto.photoObjectKey()).isNull();
+        assertThat(withoutPhoto.updatedAt()).isEqualTo(photoUpdatedAt.plusSeconds(1));
+    }
+
+    @Test
     void rejectsInvalidRecordIdsMissingDetailsAndMissingTimestamps() {
         // Bug caught: records with invalid persistence identity or audit data could enter the domain.
         CatchRecordDetails details = validDetails(TODAY, null, null, TODAY);
@@ -171,6 +196,8 @@ class CatchRecordTest {
                 .isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> new CatchRecord(1L, 9L, details, null, null, UPDATED_AT))
                 .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new CatchRecord(1L, 9L, details, " ", CREATED_AT, UPDATED_AT))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

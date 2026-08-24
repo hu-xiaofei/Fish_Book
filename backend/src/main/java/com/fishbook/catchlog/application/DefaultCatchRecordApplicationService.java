@@ -11,6 +11,8 @@ import com.fishbook.catchlog.domain.CatchRecordRepository;
 import com.fishbook.catchlog.domain.InvalidCatchRecordException;
 import com.fishbook.identity.application.ProfileApplicationService;
 import com.fishbook.identity.application.UserView;
+import com.fishbook.media.cleanup.MediaCleanupReason;
+import com.fishbook.media.cleanup.MediaCleanupService;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -33,16 +35,19 @@ public class DefaultCatchRecordApplicationService implements CatchRecordApplicat
     private final ProfileApplicationService profileApplicationService;
     private final FishCatalogQueryService fishCatalogQueryService;
     private final CatchRecordRepository catchRecordRepository;
+    private final MediaCleanupService cleanupService;
     private final Clock clock;
 
     public DefaultCatchRecordApplicationService(
             ProfileApplicationService profileApplicationService,
             FishCatalogQueryService fishCatalogQueryService,
             CatchRecordRepository catchRecordRepository,
+            MediaCleanupService cleanupService,
             Clock clock) {
         this.profileApplicationService = Objects.requireNonNull(profileApplicationService);
         this.fishCatalogQueryService = Objects.requireNonNull(fishCatalogQueryService);
         this.catchRecordRepository = Objects.requireNonNull(catchRecordRepository);
+        this.cleanupService = Objects.requireNonNull(cleanupService);
         this.clock = Objects.requireNonNull(clock);
     }
 
@@ -97,8 +102,13 @@ public class DefaultCatchRecordApplicationService implements CatchRecordApplicat
     @Transactional
     public void delete(String authenticatedEmail, long id) {
         UserView user = currentUser(authenticatedEmail);
+        CatchRecord existing = ownedRecord(id, user.id());
         if (!catchRecordRepository.deleteByIdAndUserId(id, user.id())) {
             throw new CatchRecordNotFoundException(id);
+        }
+        if (existing.photoObjectKey() != null) {
+            cleanupService.enqueue(
+                    existing.photoObjectKey(), MediaCleanupReason.RECORD_DELETED, clock.instant());
         }
     }
 

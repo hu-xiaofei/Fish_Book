@@ -44,6 +44,7 @@ class CatchRecordApiIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        jdbcTemplate.update("DELETE FROM media_cleanup_jobs");
         jdbcTemplate.update("DELETE FROM catch_records");
         jdbcTemplate.update("DELETE FROM users WHERE id IN (?, ?)", USER_ID, OTHER_USER_ID);
         insertUser(USER_ID, USER_EMAIL);
@@ -139,12 +140,18 @@ class CatchRecordApiIntegrationTest {
 
     @Test
     void deleteReturnsNoContentThenNotFound() throws Exception {
-        long id = insertCatchFor(USER_ID, "2026-08-18", "Delete me", null);
+        long id = insertCatchFor(
+                USER_ID, "2026-08-18", "Delete me", "catches/9401/delete/private");
 
         mvc.perform(delete("/api/v1/catches/{id}", id).with(user(USER_EMAIL)).with(csrf()))
                 .andExpect(status().isNoContent());
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM catch_records WHERE id = ?", Integer.class, id)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM media_cleanup_jobs "
+                        + "WHERE object_key = ? AND reason = 'RECORD_DELETED'",
+                Integer.class,
+                "catches/9401/delete/private")).isEqualTo(1);
 
         mvc.perform(delete("/api/v1/catches/{id}", id).with(user(USER_EMAIL)).with(csrf()))
                 .andExpect(status().isNotFound())

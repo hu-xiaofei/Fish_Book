@@ -15,6 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @SpringBootTest(properties = {
         "spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration"
@@ -35,6 +36,9 @@ class HealthEndpointTest {
 
     @MockitoBean
     MediaCleanupJobRepository mediaCleanupJobRepository;
+
+    @MockitoBean
+    TransactionTemplate transactionTemplate;
 
     @Autowired
     MockMvc mvc;

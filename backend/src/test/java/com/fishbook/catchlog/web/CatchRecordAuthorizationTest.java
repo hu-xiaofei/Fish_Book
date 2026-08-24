@@ -3,6 +3,7 @@ package com.fishbook.catchlog.web;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -15,6 +16,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpMethod;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -47,6 +50,18 @@ class CatchRecordAuthorizationTest {
         mvc.perform(delete("/api/v1/catches/1"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+        mvc.perform(get("/api/v1/catches/1/photo"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+        mvc.perform(multipart(HttpMethod.PUT, "/api/v1/catches/1/photo")
+                        .file(new MockMultipartFile(
+                                "photo", "photo.jpg", "image/jpeg",
+                                new byte[] {(byte) 0xff, (byte) 0xd8, (byte) 0xff})))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+        mvc.perform(delete("/api/v1/catches/1/photo"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
     }
 
     @Test
@@ -62,6 +77,16 @@ class CatchRecordAuthorizationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CSRF_INVALID"));
         mvc.perform(delete("/api/v1/catches/1").with(user("catch-api@example.com")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_INVALID"));
+        mvc.perform(multipart(HttpMethod.PUT, "/api/v1/catches/1/photo")
+                        .file(new MockMultipartFile(
+                                "photo", "photo.jpg", "image/jpeg",
+                                new byte[] {(byte) 0xff, (byte) 0xd8, (byte) 0xff}))
+                        .with(user("catch-api@example.com")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_INVALID"));
+        mvc.perform(delete("/api/v1/catches/1/photo").with(user("catch-api@example.com")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CSRF_INVALID"));
     }

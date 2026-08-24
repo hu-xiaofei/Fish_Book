@@ -3,6 +3,7 @@ package com.fishbook.common.error;
 import com.fishbook.catalog.application.InvalidCatalogQueryException;
 import com.fishbook.catalog.domain.FishNotFoundException;
 import com.fishbook.catchlog.application.InvalidCatchRecordQueryException;
+import com.fishbook.catchlog.application.CatchPhotoNotFoundException;
 import com.fishbook.catchlog.domain.CatchRecordNotFoundException;
 import com.fishbook.catchlog.domain.InvalidCatchRecordException;
 import com.fishbook.favorites.application.InvalidFavoriteQueryException;
@@ -11,6 +12,8 @@ import com.fishbook.identity.domain.InvalidEmailException;
 import com.fishbook.identity.domain.InvalidNicknameException;
 import com.fishbook.identity.domain.InvalidPasswordException;
 import com.fishbook.identity.domain.UserNotFoundException;
+import com.fishbook.media.application.InvalidCatchPhotoException;
+import com.fishbook.media.domain.MediaStorageUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.util.Comparator;
@@ -28,6 +31,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -78,6 +83,46 @@ public class GlobalExceptionHandler {
                 HttpStatus.NOT_FOUND,
                 exception.code(),
                 "Catch record was not found",
+                List.of(),
+                request);
+    }
+
+    @ExceptionHandler(CatchPhotoNotFoundException.class)
+    ResponseEntity<ApiErrorResponse> handleCatchPhotoNotFound(
+            CatchPhotoNotFoundException exception,
+            HttpServletRequest request) {
+        return error(
+                HttpStatus.NOT_FOUND,
+                exception.code(),
+                "Catch photo was not found",
+                List.of(),
+                request);
+    }
+
+    @ExceptionHandler({
+            InvalidCatchPhotoException.class,
+            MaxUploadSizeExceededException.class,
+            MissingServletRequestPartException.class
+    })
+    ResponseEntity<ApiErrorResponse> handleInvalidCatchPhoto(
+            Exception exception,
+            HttpServletRequest request) {
+        return error(
+                HttpStatus.BAD_REQUEST,
+                "INVALID_CATCH_PHOTO",
+                "Catch photo is invalid",
+                List.of(),
+                request);
+    }
+
+    @ExceptionHandler(MediaStorageUnavailableException.class)
+    ResponseEntity<ApiErrorResponse> handleMediaStorageUnavailable(
+            MediaStorageUnavailableException exception,
+            HttpServletRequest request) {
+        return error(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "MEDIA_STORAGE_UNAVAILABLE",
+                "Media storage is temporarily unavailable",
                 List.of(),
                 request);
     }
