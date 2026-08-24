@@ -8,6 +8,7 @@ import com.fishbook.catalog.domain.FishRepository;
 import com.fishbook.catchlog.domain.CatchRecordRepository;
 import com.fishbook.favorites.domain.FavoriteRepository;
 import com.fishbook.identity.domain.UserRepository;
+import com.fishbook.media.cleanup.MediaCleanupJobRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,6 +32,9 @@ class HealthEndpointTest {
 
     @MockitoBean
     CatchRecordRepository catchRecordRepository;
+
+    @MockitoBean
+    MediaCleanupJobRepository mediaCleanupJobRepository;
 
     @Autowired
     MockMvc mvc;
