@@ -13,9 +13,10 @@ import { FAVORITES_QUERY_KEY } from '../../favorites/api/favoritesApi';
 import type { CatchRecordDetail, CatchRecordPage } from '../model/types';
 import { CatchNewPage } from './CatchNewPage';
 
-const { createCatchRecordMock, fetchFishPageMock } = vi.hoisted(() => ({
+const { createCatchRecordMock, fetchFishPageMock, putCatchPhotoMock } = vi.hoisted(() => ({
   createCatchRecordMock: vi.fn(),
   fetchFishPageMock: vi.fn(),
+  putCatchPhotoMock: vi.fn(),
 }));
 
 vi.mock('../api/catchRecordsApi', async (importOriginal) => {
@@ -26,6 +27,11 @@ vi.mock('../api/catchRecordsApi', async (importOriginal) => {
 vi.mock('../../catalog/api/catalogApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../catalog/api/catalogApi')>();
   return { ...actual, fetchFishPage: fetchFishPageMock };
+});
+
+vi.mock('../api/catchPhotoApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/catchPhotoApi')>();
+  return { ...actual, putCatchPhoto: putCatchPhotoMock };
 });
 
 const savedCatch: CatchRecordDetail = {
@@ -138,6 +144,7 @@ async function completeRequiredFields(user: ReturnType<typeof userEvent.setup>) 
 beforeEach(() => {
   createCatchRecordMock.mockReset();
   fetchFishPageMock.mockReset();
+  putCatchPhotoMock.mockReset();
   fetchFishPageMock.mockResolvedValue({
     items: [{
       slug: 'channa-argus', commonNameZh: '乌鳢', scientificName: 'Channa argus',
@@ -188,6 +195,35 @@ test('successful creation seeds detail cache, invalidates catches, and navigates
     fishSlug: 'channa-argus', caughtOn: '2026-08-20', location: '城郊水库',
     lengthCm: null, weightG: null, method: null, notes: null,
   });
+  expect(putCatchPhotoMock).not.toHaveBeenCalled();
+});
+
+test('keeps a successfully created record when optional photo upload fails and allows retry', async () => {
+  createCatchRecordMock.mockResolvedValue(savedCatch);
+  putCatchPhotoMock
+    .mockRejectedValueOnce(new Error('minio unavailable at storage.internal'))
+    .mockResolvedValueOnce(undefined);
+  const { user, queryClient } = renderNewPage();
+  const photo = new File(['jpeg'], 'catch.jpg', { type: 'image/jpeg' });
+
+  await completeRequiredFields(user);
+  await user.upload(screen.getByLabelText('照片（可选）'), photo);
+  await user.click(screen.getByRole('button', { name: '保存记录' }));
+
+  const status = await screen.findByText('记录已保存，照片未上传');
+  expect(status).not.toHaveTextContent('storage.internal');
+  expect(screen.getByRole('link', { name: '前往记录详情' }))
+    .toHaveAttribute('href', '/catches/31');
+  expect(screen.getByTestId('location')).toHaveTextContent('/catches/new');
+  expect(createCatchRecordMock.mock.invocationCallOrder[0])
+    .toBeLessThan(putCatchPhotoMock.mock.invocationCallOrder[0] as number);
+  expect(queryClient.getQueryData(catchDetailQueryKey(31))).toEqual(savedCatch);
+
+  await user.click(screen.getByRole('button', { name: '重试上传' }));
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/catches/31'));
+  expect(putCatchPhotoMock).toHaveBeenCalledTimes(2);
+  expect(queryClient.getQueryData<CatchRecordDetail>(catchDetailQueryKey(31))?.hasPhoto)
+    .toBe(true);
 });
 
 test('maps backend field errors and keeps entered values in place', async () => {

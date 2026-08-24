@@ -21,10 +21,14 @@ const {
   deleteCatchRecordMock,
   fetchCatchRecordMock,
   fetchCurrentUserMock,
+  putCatchPhotoMock,
+  removeCatchPhotoMock,
 } = vi.hoisted(() => ({
   deleteCatchRecordMock: vi.fn(),
   fetchCatchRecordMock: vi.fn(),
   fetchCurrentUserMock: vi.fn(),
+  putCatchPhotoMock: vi.fn(),
+  removeCatchPhotoMock: vi.fn(),
 }));
 
 vi.mock('../api/catchRecordsApi', async (importOriginal) => {
@@ -39,6 +43,15 @@ vi.mock('../api/catchRecordsApi', async (importOriginal) => {
 vi.mock('../../auth/api/currentUser', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../auth/api/currentUser')>();
   return { ...actual, fetchCurrentUser: fetchCurrentUserMock };
+});
+
+vi.mock('../api/catchPhotoApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/catchPhotoApi')>();
+  return {
+    ...actual,
+    putCatchPhoto: putCatchPhotoMock,
+    removeCatchPhoto: removeCatchPhotoMock,
+  };
 });
 
 const savedCatch: CatchRecordDetail = {
@@ -187,6 +200,8 @@ beforeEach(() => {
   deleteCatchRecordMock.mockReset();
   fetchCatchRecordMock.mockReset();
   fetchCurrentUserMock.mockReset();
+  putCatchPhotoMock.mockReset();
+  removeCatchPhotoMock.mockReset();
   fetchCatchRecordMock.mockResolvedValue(savedCatch);
   fetchCurrentUserMock.mockResolvedValue({
     id: 1, email: 'angler@example.com', nickname: 'River', role: 'USER',
@@ -202,8 +217,16 @@ test('shows all saved fields and the no-photo state', async () => {
   expect(screen.getByText('42.5 cm · 1350 g')).toBeInTheDocument();
   expect(screen.getByText('路亚')).toBeInTheDocument();
   expect(screen.getByText('傍晚近岸中鱼')).toBeInTheDocument();
-  expect(screen.getByText('尚未添加照片')).toBeInTheDocument();
+  expect(screen.getByText('暂无照片')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: '编辑记录' })).toHaveAttribute('href', '/catches/31/edit');
+});
+
+test('renders a private photo only when the detail says one exists', async () => {
+  fetchCatchRecordMock.mockResolvedValue({ ...savedCatch, hasPhoto: true });
+  renderCatchDetail();
+
+  const image = await screen.findByRole('img', { name: '乌鳢钓获照片' });
+  expect(image.getAttribute('src')).toContain('/api/v1/catches/31/photo');
 });
 
 test('renders empty optional fields without inventing measurements or notes', async () => {
@@ -264,7 +287,7 @@ test('requires an explicit confirmation before deleting', async () => {
   await user.click(screen.getByRole('button', { name: '确认删除' }));
 
   await waitFor(() => expect(deleteCatchRecordMock).toHaveBeenCalledWith(31));
-  expect(await screen.findByTestId('location')).toHaveTextContent('/catches');
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/catches$/));
   expect(queryClient.getQueryData(catchDetailQueryKey(31))).toBeUndefined();
   expect(queryClient.getQueryState(catchPageQueryKey(0))?.isInvalidated).toBe(true);
 });

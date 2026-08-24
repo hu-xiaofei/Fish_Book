@@ -15,6 +15,7 @@ import {
   deleteCatchRecord,
   fetchCatchRecord,
 } from '../api/catchRecordsApi';
+import { CatchPhotoPanel } from '../components/CatchPhotoPanel';
 import type { CatchRecordDetail } from '../model/types';
 import styles from './CatchPages.module.css';
 
@@ -134,7 +135,6 @@ export function CatchDetailPage() {
           <div><dt>尺寸</dt><dd>{detailMeasurements.join(' · ')}</dd></div>
           <div><dt>钓法</dt><dd>{catchRecord.method ?? '未记录'}</dd></div>
           <div><dt>备注</dt><dd>{catchRecord.notes ?? '未记录'}</dd></div>
-          <div><dt>照片</dt><dd>{catchRecord.hasPhoto ? '已保存照片' : '尚未添加照片'}</dd></div>
         </dl>
         <div className={styles.navigation}>
           <Link to={`/catches/${catchRecord.id}/edit`}>编辑记录</Link>
@@ -143,6 +143,13 @@ export function CatchDetailPage() {
           </button>
         </div>
       </article>
+
+      <CatchPhotoPanel
+        key={catchRecord.id}
+        recordId={catchRecord.id}
+        hasPhoto={catchRecord.hasPhoto}
+        photoAlt={`${catchRecord.commonNameZh}钓获照片`}
+      />
 
       {confirmingDelete ? (
         <section

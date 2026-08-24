@@ -1,0 +1,81 @@
+.panel {
+  display: grid;
+  justify-items: start;
+  gap: 0.85rem;
+  margin: 2rem 0;
+  padding: 1rem;
+  border: 1px solid #c9d9d1;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+.panel h2,
+.panel h3,
+.panel p {
+  margin: 0;
+}
+
+.hint,
+.empty {
+  color: #587068;
+}
+
+.photo,
+.fallback {
+  box-sizing: border-box;
+  width: min(100%, 40rem);
+  border-radius: 0.65rem;
+}
+
+.photo {
+  max-height: 32rem;
+  object-fit: contain;
+  background: #eaf3ef;
+}
+
+.fallback {
+  display: grid;
+  min-height: 12rem;
+  place-content: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: #eaf3ef;
+  text-align: center;
+}
+
+.controls,
+.confirmation {
+  display: grid;
+  justify-items: start;
+  gap: 0.65rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.panel button {
+  min-height: 2.75rem;
+  box-sizing: border-box;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #89a79b;
+  border-radius: 0.4rem;
+  background: #fff;
+  color: #075f4b;
+  font: inherit;
+  font-weight: 600;
+}
+
+.panel button:focus-visible,
+.panel input:focus-visible {
+  outline: 3px solid #e4a11b;
+  outline-offset: 3px;
+}
+
+.confirmation {
+  padding: 1rem;
+  border-left: 0.25rem solid #e4a11b;
+  background: #fff9e8;
+}
