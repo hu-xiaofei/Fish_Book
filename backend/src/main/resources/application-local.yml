@@ -6,6 +6,14 @@ spring:
   flyway:
     enabled: true
 
+fishbook:
+  media:
+    enabled: ${FISHBOOK_MEDIA_ENABLED:true}
+    endpoint: ${FISHBOOK_MEDIA_ENDPOINT:http://localhost:9000}
+    access-key: ${FISHBOOK_MEDIA_ACCESS_KEY:${MINIO_ROOT_USER:fishbook_minio}}
+    secret-key: ${FISHBOOK_MEDIA_SECRET_KEY:${MINIO_ROOT_PASSWORD:fishbook_minio_local_only}}
+    bucket: ${FISHBOOK_MEDIA_BUCKET:${MINIO_BUCKET:fishbook-local}}
+
 server:
   servlet:
     session:

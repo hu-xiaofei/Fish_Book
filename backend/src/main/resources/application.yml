@@ -1,6 +1,10 @@
 spring:
   application:
     name: fishbook-backend
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
   jackson:
     time-zone: UTC
   jpa:
@@ -8,6 +12,10 @@ spring:
   session:
     jdbc:
       initialize-schema: never
+
+fishbook:
+  media:
+    enabled: false
 
 server:
   servlet:
