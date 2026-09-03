@@ -1,5 +1,6 @@
 package com.fishbook.catalog.persistence;
 
+import com.fishbook.catalog.domain.HabitatType;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -21,6 +22,11 @@ class FishHabitatJpaEntity {
     private FishSpeciesJpaEntity fishSpecies;
 
     protected FishHabitatJpaEntity() {}
+
+    FishHabitatJpaEntity(FishSpeciesJpaEntity fishSpecies, HabitatType habitatCode) {
+        this.fishSpecies = fishSpecies;
+        this.id = new FishHabitatId(fishSpecies.getId(), habitatCode);
+    }
 
     FishHabitatId getId() { return id; }
 

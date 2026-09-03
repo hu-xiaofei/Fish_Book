@@ -7,6 +7,7 @@ import com.fishbook.catalog.domain.FishSearchCriteria;
 import com.fishbook.catalog.domain.FishSpecies;
 import com.fishbook.catalog.domain.HabitatType;
 import com.fishbook.catalog.domain.ImageAttribution;
+import com.fishbook.catalog.domain.PublicationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -31,6 +32,7 @@ class DefaultFishCatalogQueryServiceTest {
         repository = new RecordingFishRepository();
         repository.page = new FishPage(List.of(fish()), 0, 12, 1, 1);
         repository.families = List.of("鳢科", "鲤科");
+        repository.habitats = List.of(HabitatType.RIVER, HabitatType.LAKE);
         service = new DefaultFishCatalogQueryService(repository);
     }
 
@@ -129,6 +131,28 @@ class DefaultFishCatalogQueryServiceTest {
     }
 
     @Test
+    void publicDetailAndNewAssociationUsePublishedLookup() {
+        repository.detail = fish();
+
+        service.getBySlug("channa-argus");
+        service.getReferenceBySlug("channa-argus");
+
+        assertThat(repository.publishedSlugLookups).containsExactly(
+                "channa-argus", "channa-argus");
+    }
+
+    @Test
+    void historicalSummaryAndExplicitInternalReferenceCanReadUnpublishedFish() {
+        FishSpecies unpublished = unpublishedFish();
+        repository.byIds = List.of(unpublished);
+        repository.anyDetail = unpublished;
+
+        assertThat(service.getSummariesByIds(List.of(9L))).hasSize(1);
+        assertThat(service.getReferenceBySlugIncludingUnpublished("unpublished-fish").id())
+                .isEqualTo(9L);
+    }
+
+    @Test
     void returnsReferencesInRequestedSlugOrderWhenRepositoryOrderDiffers() {
         FishSpecies carp = carp();
         repository.bySlugs = List.of(carp, fish());
@@ -191,13 +215,13 @@ class DefaultFishCatalogQueryServiceTest {
     }
 
     @Test
-    void returnsFamiliesInRepositoryOrderAndHabitatsInEnumOrder() {
+    void returnsPublishedFamiliesAndHabitatsInRepositoryOrder() {
         FishFilterOptionsView options = service.getFilterOptions();
 
         assertThat(options.families()).containsExactly("鳢科", "鲤科");
         assertThat(options.habitats())
                 .extracting(HabitatOptionView::code)
-                .containsExactly("RIVER", "LAKE", "RESERVOIR", "POND", "STREAM");
+                .containsExactly("RIVER", "LAKE");
     }
 
     private static FishSpecies fish() {
@@ -226,25 +250,42 @@ class DefaultFishCatalogQueryServiceTest {
                 2, now, now);
     }
 
+    private static FishSpecies unpublishedFish() {
+        Instant now = Instant.parse("2026-08-11T00:00:00Z");
+        FishSpecies published = fish();
+        return FishSpecies.restore(
+                9L, "unpublished-fish", published.content(), PublicationStatus.UNPUBLISHED,
+                now, now, now);
+    }
+
     private static final class RecordingFishRepository implements FishRepository {
 
         private FishSearchCriteria lastCriteria;
         private FishPage page;
         private FishSpecies detail;
+        private FishSpecies anyDetail;
         private List<String> families = List.of();
+        private List<HabitatType> habitats = List.of();
         private List<FishSpecies> byIds = List.of();
         private List<FishSpecies> bySlugs = List.of();
         private List<Long> lastSummaryLookupIds = List.of();
+        private List<String> publishedSlugLookups = new java.util.ArrayList<>();
 
         @Override
-        public FishPage search(FishSearchCriteria criteria) {
+        public FishPage searchPublished(FishSearchCriteria criteria) {
             lastCriteria = criteria;
             return page;
         }
 
         @Override
-        public Optional<FishSpecies> findBySlug(String slug) {
+        public Optional<FishSpecies> findPublishedBySlug(String slug) {
+            publishedSlugLookups.add(slug);
             return Optional.ofNullable(detail);
+        }
+
+        @Override
+        public Optional<FishSpecies> findAnyBySlug(String slug) {
+            return Optional.ofNullable(anyDetail);
         }
 
         @Override
@@ -254,13 +295,18 @@ class DefaultFishCatalogQueryServiceTest {
         }
 
         @Override
-        public List<FishSpecies> findAllBySlugs(List<String> slugs) {
+        public List<FishSpecies> findAllPublishedBySlugs(List<String> slugs) {
             return bySlugs;
         }
 
         @Override
-        public List<String> findAvailableFamilies() {
+        public List<String> findPublishedAvailableFamilies() {
             return families;
+        }
+
+        @Override
+        public List<HabitatType> findPublishedAvailableHabitats() {
+            return habitats;
         }
     }
 }

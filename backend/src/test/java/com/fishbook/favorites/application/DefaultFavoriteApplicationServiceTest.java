@@ -62,6 +62,15 @@ class DefaultFavoriteApplicationServiceTest {
     }
 
     @Test
+    void addUsesPublishedLookupWhileRemoveUsesHistoricalReferenceLookup() {
+        service.add("reader@example.com", "channa-argus");
+        service.remove("reader@example.com", "cyprinus-carpio");
+
+        assertThat(catalog.publishedReferenceSlugs).containsExactly("channa-argus");
+        assertThat(catalog.internalReferenceSlugs).containsExactly("cyprinus-carpio");
+    }
+
+    @Test
     void listsFavoriteSummariesInFavoriteOrderWithTheirSavedTimes() {
         Instant newer = Instant.parse("2026-08-14T12:00:00Z");
         Instant older = Instant.parse("2026-08-13T12:00:00Z");
@@ -170,6 +179,8 @@ class DefaultFavoriteApplicationServiceTest {
                         List.of("鲤鱼"), List.of(new HabitatOptionView("RIVER", "河流")),
                         "/images/fish/cyprinus-carpio.jpg", "鲤"));
         private List<String> lastReferenceSlugs = List.of();
+        private List<String> publishedReferenceSlugs = new java.util.ArrayList<>();
+        private List<String> internalReferenceSlugs = new java.util.ArrayList<>();
 
         @Override
         public FishPageView search(FishCatalogQuery query) {
@@ -183,6 +194,13 @@ class DefaultFavoriteApplicationServiceTest {
 
         @Override
         public FishReferenceView getReferenceBySlug(String slug) {
+            publishedReferenceSlugs.add(slug);
+            return references.get(slug);
+        }
+
+        @Override
+        public FishReferenceView getReferenceBySlugIncludingUnpublished(String slug) {
+            internalReferenceSlugs.add(slug);
             return references.get(slug);
         }
 

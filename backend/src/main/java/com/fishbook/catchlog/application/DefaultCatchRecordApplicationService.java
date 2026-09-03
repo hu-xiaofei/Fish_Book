@@ -92,7 +92,10 @@ public class DefaultCatchRecordApplicationService implements CatchRecordApplicat
         validateCommandSlug(command);
         UserView user = currentUser(authenticatedEmail);
         CatchRecord existing = ownedRecord(id, user.id());
-        FishReferenceView fish = fishCatalogQueryService.getReferenceBySlug(command.fishSlug());
+        FishSummaryView existingFish = summaryFor(existing.details().fishId());
+        FishReferenceView fish = command.fishSlug().equals(existingFish.slug())
+                ? fishCatalogQueryService.getReferenceBySlugIncludingUnpublished(command.fishSlug())
+                : fishCatalogQueryService.getReferenceBySlug(command.fishSlug());
         CatchRecordDetails details = toDetails(command, fish.id(), today());
         CatchRecord saved = catchRecordRepository.save(existing.update(details, clock.instant()));
         return toDetailView(saved, summaryFor(saved.details().fishId()));

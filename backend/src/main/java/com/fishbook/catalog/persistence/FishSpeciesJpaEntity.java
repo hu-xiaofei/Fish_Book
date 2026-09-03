@@ -1,7 +1,12 @@
 package com.fishbook.catalog.persistence;
 
+import com.fishbook.catalog.domain.FishSpecies;
+import com.fishbook.catalog.domain.PublicationStatus;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -78,19 +83,60 @@ class FishSpeciesJpaEntity {
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "publication_status", nullable = false, length = 20)
+    private PublicationStatus publicationStatus;
+
+    @Column(name = "published_at")
+    private Instant publishedAt;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @OneToMany(mappedBy = "fishSpecies", fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "fishSpecies", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<FishAliasJpaEntity> aliases = new HashSet<>();
 
-    @OneToMany(mappedBy = "fishSpecies", fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "fishSpecies", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<FishHabitatJpaEntity> habitats = new HashSet<>();
 
     protected FishSpeciesJpaEntity() {}
+
+    FishSpeciesJpaEntity(FishSpecies fish) {
+        slug = fish.slug();
+        apply(fish);
+    }
+
+    void apply(FishSpecies fish) {
+        commonNameZh = fish.commonNameZh();
+        scientificName = fish.scientificName();
+        familyNameZh = fish.familyNameZh();
+        familyScientificName = fish.familyScientificName();
+        genusNameZh = fish.genusNameZh();
+        genusScientificName = fish.genusScientificName();
+        appearance = fish.appearance();
+        sizeDescription = fish.sizeDescription();
+        habitatDescription = fish.habitatDescription();
+        distribution = fish.distribution();
+        description = fish.description();
+        imagePath = fish.image().path();
+        imageAltText = fish.image().altText();
+        imageSourceUrl = fish.image().sourceUrl();
+        imageAuthor = fish.image().author();
+        imageLicenseName = fish.image().licenseName();
+        imageLicenseUrl = fish.image().licenseUrl();
+        displayOrder = fish.displayOrder();
+        publicationStatus = fish.status();
+        publishedAt = fish.publishedAt();
+        createdAt = fish.createdAt();
+        updatedAt = fish.updatedAt();
+        aliases.clear();
+        fish.aliases().forEach(alias -> aliases.add(new FishAliasJpaEntity(this, alias)));
+        habitats.clear();
+        fish.habitats().forEach(habitat -> habitats.add(new FishHabitatJpaEntity(this, habitat)));
+    }
 
     Long getId() { return id; }
 
@@ -131,6 +177,10 @@ class FishSpeciesJpaEntity {
     String getImageLicenseUrl() { return imageLicenseUrl; }
 
     int getDisplayOrder() { return displayOrder; }
+
+    PublicationStatus getPublicationStatus() { return publicationStatus; }
+
+    Instant getPublishedAt() { return publishedAt; }
 
     Instant getCreatedAt() { return createdAt; }
 

@@ -32,7 +32,7 @@ public class DefaultFishCatalogQueryService implements FishCatalogQueryService {
     @Transactional(readOnly = true)
     public FishPageView search(FishCatalogQuery query) {
         Objects.requireNonNull(query, "query must not be null");
-        FishPage page = repository.search(new FishSearchCriteria(
+        FishPage page = repository.searchPublished(new FishSearchCriteria(
                 query.query(), query.family(), query.habitat(), query.page(), PAGE_SIZE));
         return new FishPageView(
                 page.items().stream().map(this::toSummary).toList(),
@@ -43,7 +43,7 @@ public class DefaultFishCatalogQueryService implements FishCatalogQueryService {
     @Transactional(readOnly = true)
     public FishDetailView getBySlug(String slug) {
         validateSlug(slug);
-        FishSpecies fish = repository.findBySlug(slug)
+        FishSpecies fish = repository.findPublishedBySlug(slug)
                 .orElseThrow(() -> new FishNotFoundException(slug));
         return toDetail(fish);
     }
@@ -52,7 +52,16 @@ public class DefaultFishCatalogQueryService implements FishCatalogQueryService {
     @Transactional(readOnly = true)
     public FishReferenceView getReferenceBySlug(String slug) {
         validateSlug(slug);
-        FishSpecies fish = repository.findBySlug(slug)
+        FishSpecies fish = repository.findPublishedBySlug(slug)
+                .orElseThrow(() -> new FishNotFoundException(slug));
+        return toReference(fish);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public FishReferenceView getReferenceBySlugIncludingUnpublished(String slug) {
+        validateSlug(slug);
+        FishSpecies fish = repository.findAnyBySlug(slug)
                 .orElseThrow(() -> new FishNotFoundException(slug));
         return toReference(fish);
     }
@@ -61,7 +70,7 @@ public class DefaultFishCatalogQueryService implements FishCatalogQueryService {
     @Transactional(readOnly = true)
     public List<FishReferenceView> getReferencesBySlugs(List<String> slugs) {
         validateSlugs(slugs);
-        Map<String, FishSpecies> fishBySlug = repository.findAllBySlugs(slugs).stream()
+        Map<String, FishSpecies> fishBySlug = repository.findAllPublishedBySlugs(slugs).stream()
                 .collect(Collectors.toMap(FishSpecies::slug, Function.identity()));
         return slugs.stream()
                 .map(slug -> {
@@ -96,8 +105,8 @@ public class DefaultFishCatalogQueryService implements FishCatalogQueryService {
     @Transactional(readOnly = true)
     public FishFilterOptionsView getFilterOptions() {
         return new FishFilterOptionsView(
-                repository.findAvailableFamilies(),
-                List.of(HabitatType.values()).stream().map(this::toHabitatOption).toList());
+                repository.findPublishedAvailableFamilies(),
+                repository.findPublishedAvailableHabitats().stream().map(this::toHabitatOption).toList());
     }
 
     private FishSummaryView toSummary(FishSpecies fish) {

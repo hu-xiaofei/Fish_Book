@@ -27,6 +27,11 @@ class FishAliasJpaEntity {
 
     protected FishAliasJpaEntity() {}
 
+    FishAliasJpaEntity(FishSpeciesJpaEntity fishSpecies, String alias) {
+        this.fishSpecies = fishSpecies;
+        this.alias = alias;
+    }
+
     Long getId() { return id; }
 
     FishSpeciesJpaEntity getFishSpecies() { return fishSpecies; }

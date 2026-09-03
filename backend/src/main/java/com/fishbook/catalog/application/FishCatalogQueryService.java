@@ -10,6 +10,8 @@ public interface FishCatalogQueryService {
 
     FishReferenceView getReferenceBySlug(String slug);
 
+    FishReferenceView getReferenceBySlugIncludingUnpublished(String slug);
+
     List<FishReferenceView> getReferencesBySlugs(List<String> slugs);
 
     List<FishSummaryView> getSummariesByIds(List<Long> ids);

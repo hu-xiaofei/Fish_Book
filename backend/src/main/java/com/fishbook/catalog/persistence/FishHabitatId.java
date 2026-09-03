@@ -21,6 +21,11 @@ class FishHabitatId implements Serializable {
 
     protected FishHabitatId() {}
 
+    FishHabitatId(Long fishSpeciesId, HabitatType habitatCode) {
+        this.fishSpeciesId = fishSpeciesId;
+        this.habitatCode = habitatCode;
+    }
+
     HabitatType getHabitatCode() { return habitatCode; }
 
     @Override

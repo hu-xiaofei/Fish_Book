@@ -1,11 +1,15 @@
 package com.fishbook.catalog.persistence;
 
 import com.fishbook.catalog.domain.FishPage;
+import com.fishbook.catalog.domain.FishManagementRepository;
+import com.fishbook.catalog.domain.FishManagementSearchCriteria;
 import com.fishbook.catalog.domain.FishRepository;
 import com.fishbook.catalog.domain.FishSearchCriteria;
 import com.fishbook.catalog.domain.FishSpecies;
+import com.fishbook.catalog.domain.FishSpeciesContent;
 import com.fishbook.catalog.domain.HabitatType;
 import com.fishbook.catalog.domain.ImageAttribution;
+import com.fishbook.catalog.domain.PublicationStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -23,7 +27,7 @@ import java.util.stream.Collectors;
 
 @Repository
 @Transactional(readOnly = true)
-public class JpaFishRepositoryAdapter implements FishRepository {
+public class JpaFishRepositoryAdapter implements FishRepository, FishManagementRepository {
 
     private final SpringDataFishSpeciesJpaRepository repository;
 
@@ -32,13 +36,25 @@ public class JpaFishRepositoryAdapter implements FishRepository {
     }
 
     @Override
-    public FishPage search(FishSearchCriteria criteria) {
+    public FishPage searchPublished(FishSearchCriteria criteria) {
         PageRequest pageRequest = PageRequest.of(
                 criteria.page(),
                 criteria.size(),
                 Sort.by("displayOrder").ascending().and(Sort.by("id")));
-        Page<Long> idPage = repository.searchIds(
+        Page<Long> idPage = repository.searchPublishedIds(
                 likePattern(criteria.query()), criteria.family(), criteria.habitat(), pageRequest);
+        return page(criteria.page(), criteria.size(), idPage);
+    }
+
+    @Override
+    public FishPage searchManaged(FishManagementSearchCriteria criteria) {
+        PageRequest pageRequest = PageRequest.of(
+                criteria.page(), criteria.size(), Sort.by("updatedAt").descending().and(Sort.by("id").descending()));
+        Page<Long> idPage = repository.searchManagedIds(likePattern(criteria.query()), criteria.status(), pageRequest);
+        return page(criteria.page(), criteria.size(), idPage);
+    }
+
+    private FishPage page(int page, int size, Page<Long> idPage) {
         Map<Long, FishSpeciesJpaEntity> entitiesById = repository
                 .findAllWithDetailsByIdIn(idPage.getContent())
                 .stream()
@@ -47,12 +63,17 @@ public class JpaFishRepositoryAdapter implements FishRepository {
                 .map(entitiesById::get)
                 .map(this::toDomain)
                 .toList();
-        return new FishPage(items, criteria.page(), criteria.size(),
+        return new FishPage(items, page, size,
                 idPage.getTotalElements(), idPage.getTotalPages());
     }
 
     @Override
-    public Optional<FishSpecies> findBySlug(String slug) {
+    public Optional<FishSpecies> findPublishedBySlug(String slug) {
+        return repository.findBySlugAndPublicationStatus(slug, PublicationStatus.PUBLISHED).map(this::toDomain);
+    }
+
+    @Override
+    public Optional<FishSpecies> findAnyBySlug(String slug) {
         return repository.findBySlug(slug).map(this::toDomain);
     }
 
@@ -71,11 +92,11 @@ public class JpaFishRepositoryAdapter implements FishRepository {
     }
 
     @Override
-    public List<FishSpecies> findAllBySlugs(List<String> slugs) {
+    public List<FishSpecies> findAllPublishedBySlugs(List<String> slugs) {
         if (slugs.isEmpty()) {
             return List.of();
         }
-        Map<String, FishSpeciesJpaEntity> entitiesBySlug = repository.findAllWithDetailsBySlugIn(slugs).stream()
+        Map<String, FishSpeciesJpaEntity> entitiesBySlug = repository.findAllPublishedWithDetailsBySlugIn(slugs).stream()
                 .collect(Collectors.toMap(FishSpeciesJpaEntity::getSlug, Function.identity()));
         return slugs.stream()
                 .map(entitiesBySlug::get)
@@ -85,8 +106,34 @@ public class JpaFishRepositoryAdapter implements FishRepository {
     }
 
     @Override
-    public List<String> findAvailableFamilies() {
-        return repository.findAvailableFamilies().stream().sorted().toList();
+    public List<String> findPublishedAvailableFamilies() {
+        return repository.findPublishedAvailableFamilies().stream().sorted().toList();
+    }
+
+    @Override
+    public List<HabitatType> findPublishedAvailableHabitats() {
+        return repository.findPublishedAvailableHabitats().stream()
+                .sorted(Comparator.comparingInt(Enum::ordinal))
+                .toList();
+    }
+
+    @Override
+    public Optional<FishSpecies> findManagedById(long id) {
+        return repository.findWithDetailsById(id).map(this::toDomain);
+    }
+
+    @Override
+    @Transactional
+    public FishSpecies save(FishSpecies fish) {
+        FishSpeciesJpaEntity entity;
+        if (fish.id() == null) {
+            entity = new FishSpeciesJpaEntity(fish);
+        } else {
+            entity = repository.findWithDetailsById(fish.id())
+                    .orElseThrow(() -> new IllegalArgumentException("fish must exist"));
+            entity.apply(fish);
+        }
+        return toDomain(repository.saveAndFlush(entity));
     }
 
     private String likePattern(String query) {
@@ -106,30 +153,33 @@ public class JpaFishRepositoryAdapter implements FishRepository {
                 .map(FishHabitatId::getHabitatCode)
                 .sorted(Comparator.comparingInt(Enum::ordinal))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-        return new FishSpecies(
+        return FishSpecies.restore(
                 entity.getId(),
                 entity.getSlug(),
-                entity.getCommonNameZh(),
-                entity.getScientificName(),
-                entity.getFamilyNameZh(),
-                entity.getFamilyScientificName(),
-                entity.getGenusNameZh(),
-                entity.getGenusScientificName(),
-                aliases,
-                habitats,
-                entity.getAppearance(),
-                entity.getSizeDescription(),
-                entity.getHabitatDescription(),
-                entity.getDistribution(),
-                entity.getDescription(),
-                new ImageAttribution(
-                        entity.getImagePath(),
-                        entity.getImageAltText(),
-                        entity.getImageSourceUrl(),
-                        entity.getImageAuthor(),
-                        entity.getImageLicenseName(),
-                        entity.getImageLicenseUrl()),
-                entity.getDisplayOrder(),
+                new FishSpeciesContent(
+                        entity.getCommonNameZh(),
+                        entity.getScientificName(),
+                        entity.getFamilyNameZh(),
+                        entity.getFamilyScientificName(),
+                        entity.getGenusNameZh(),
+                        entity.getGenusScientificName(),
+                        aliases,
+                        habitats,
+                        entity.getAppearance(),
+                        entity.getSizeDescription(),
+                        entity.getHabitatDescription(),
+                        entity.getDistribution(),
+                        entity.getDescription(),
+                        new ImageAttribution(
+                                entity.getImagePath(),
+                                entity.getImageAltText(),
+                                entity.getImageSourceUrl(),
+                                entity.getImageAuthor(),
+                                entity.getImageLicenseName(),
+                                entity.getImageLicenseUrl()),
+                        entity.getDisplayOrder()),
+                entity.getPublicationStatus(),
+                entity.getPublishedAt(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());
     }

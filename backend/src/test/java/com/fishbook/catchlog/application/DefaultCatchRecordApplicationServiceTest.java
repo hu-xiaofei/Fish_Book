@@ -172,6 +172,22 @@ class DefaultCatchRecordApplicationServiceTest {
     }
 
     @Test
+    void createAndChangingFishUsePublishedLookupWhileRetainingUnpublishedFishUsesInternalLookup() {
+        service.create("angler@example.com", command(
+                "channa-argus", LocalDate.parse("2026-08-20"), "城郊水库"));
+        repository.ownedRecord = Optional.of(record(31L, 1L, LocalDate.parse("2026-08-19"), null));
+        service.update("angler@example.com", 31L, command(
+                "cyprinus-carpio", LocalDate.parse("2026-08-20"), "城郊水库"));
+        repository.ownedRecord = Optional.of(record(32L, 3L, LocalDate.parse("2026-08-19"), null));
+        service.update("angler@example.com", 32L, command(
+                "unpublished-fish", LocalDate.parse("2026-08-20"), "城郊水库"));
+
+        assertThat(catalog.publishedReferenceSlugs)
+                .containsExactly("channa-argus", "cyprinus-carpio");
+        assertThat(catalog.internalReferenceSlugs).containsExactly("unpublished-fish");
+    }
+
+    @Test
     void deletesOnlyTheAuthenticatedUsersRecordAndReportsMissingRecords() {
         repository.deleteResult = false;
 
@@ -256,13 +272,17 @@ class DefaultCatchRecordApplicationServiceTest {
     private static final class RecordingCatalogService implements FishCatalogQueryService {
         private final Map<String, FishReferenceView> references = Map.of(
                 "channa-argus", new FishReferenceView(1L, "channa-argus"),
-                "cyprinus-carpio", new FishReferenceView(2L, "cyprinus-carpio"));
+                "cyprinus-carpio", new FishReferenceView(2L, "cyprinus-carpio"),
+                "unpublished-fish", new FishReferenceView(3L, "unpublished-fish"));
         private final Map<Long, FishSummaryView> summaries = Map.of(
                 1L, summary("channa-argus", "乌鳢"),
-                2L, summary("cyprinus-carpio", "鲤"));
+                2L, summary("cyprinus-carpio", "鲤"),
+                3L, summary("unpublished-fish", "下架鱼"));
         private List<Long> lastSummaryIds = List.of();
         private int summaryLookupCount;
         private int referenceLookupCount;
+        private List<String> publishedReferenceSlugs = new java.util.ArrayList<>();
+        private List<String> internalReferenceSlugs = new java.util.ArrayList<>();
 
         @Override public FishPageView search(FishCatalogQuery query) { throw new UnsupportedOperationException(); }
         @Override public FishDetailView getBySlug(String slug) { throw new UnsupportedOperationException(); }
@@ -270,9 +290,16 @@ class DefaultCatchRecordApplicationServiceTest {
         @Override
         public FishReferenceView getReferenceBySlug(String slug) {
             referenceLookupCount++;
+            publishedReferenceSlugs.add(slug);
             if ("missing-fish".equals(slug)) {
                 throw new FishNotFoundException(slug);
             }
+            return references.get(slug);
+        }
+
+        @Override
+        public FishReferenceView getReferenceBySlugIncludingUnpublished(String slug) {
+            internalReferenceSlugs.add(slug);
             return references.get(slug);
         }
 
