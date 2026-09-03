@@ -1,72 +1,132 @@
 package com.fishbook.catalog.domain;
 
 import java.time.Instant;
-import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 
-public record FishSpecies(
-        Long id,
-        String slug,
-        String commonNameZh,
-        String scientificName,
-        String familyNameZh,
-        String familyScientificName,
-        String genusNameZh,
-        String genusScientificName,
-        List<String> aliases,
-        Set<HabitatType> habitats,
-        String appearance,
-        String sizeDescription,
-        String habitatDescription,
-        String distribution,
-        String description,
-        ImageAttribution image,
-        int displayOrder,
-        Instant createdAt,
-        Instant updatedAt) {
+public final class FishSpecies {
+    private final Long id;
+    private final String slug;
+    private final FishSpeciesContent content;
+    private final PublicationStatus status;
+    private final Instant publishedAt;
+    private final Instant createdAt;
+    private final Instant updatedAt;
 
-    public FishSpecies {
-        requireText(slug, "slug");
-        if (!slug.matches("[a-z0-9]+(?:-[a-z0-9]+)*")) {
-            throw new IllegalArgumentException("slug must be canonical");
-        }
-        requireText(commonNameZh, "commonNameZh");
-        requireText(scientificName, "scientificName");
-        requireText(familyNameZh, "familyNameZh");
-        requireText(familyScientificName, "familyScientificName");
-        requireText(genusNameZh, "genusNameZh");
-        requireText(genusScientificName, "genusScientificName");
-        requireText(appearance, "appearance");
-        requireText(sizeDescription, "sizeDescription");
-        requireText(habitatDescription, "habitatDescription");
-        requireText(distribution, "distribution");
-        requireText(description, "description");
-        Objects.requireNonNull(image, "image must not be null");
-        Objects.requireNonNull(createdAt, "createdAt must not be null");
-        Objects.requireNonNull(updatedAt, "updatedAt must not be null");
-        aliases = List.copyOf(Objects.requireNonNull(aliases, "aliases must not be null"));
-        if (aliases.stream().anyMatch(alias -> alias == null || alias.isBlank())) {
-            throw new IllegalArgumentException("aliases must not contain blanks");
-        }
-        if (aliases.stream().distinct().count() != aliases.size()) {
-            throw new IllegalArgumentException("aliases must be unique");
-        }
-        habitats = Collections.unmodifiableSet(new LinkedHashSet<>(
-                Objects.requireNonNull(habitats, "habitats must not be null")));
-        if (habitats.isEmpty()) {
-            throw new IllegalArgumentException("habitats must not be empty");
-        }
-        if (displayOrder <= 0) {
-            throw new IllegalArgumentException("displayOrder must be positive");
-        }
+    private FishSpecies(
+            Long id,
+            String slug,
+            FishSpeciesContent content,
+            PublicationStatus status,
+            Instant publishedAt,
+            Instant createdAt,
+            Instant updatedAt) {
+        this.id = id;
+        this.slug = requireCanonicalSlug(slug);
+        this.content = requireArgument(content, "content");
+        this.status = requireArgument(status, "status");
+        this.publishedAt = publishedAt;
+        this.createdAt = requireArgument(createdAt, "createdAt");
+        this.updatedAt = requireArgument(updatedAt, "updatedAt");
     }
 
-    private static void requireText(String value, String field) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(field + " must not be blank");
+    public FishSpecies(
+            Long id, String slug, String commonNameZh, String scientificName, String familyNameZh,
+            String familyScientificName, String genusNameZh, String genusScientificName,
+            List<String> aliases, Set<HabitatType> habitats, String appearance, String sizeDescription,
+            String habitatDescription, String distribution, String description, ImageAttribution image,
+            int displayOrder, Instant createdAt, Instant updatedAt) {
+        this(id, slug, new FishSpeciesContent(
+                        commonNameZh, scientificName, familyNameZh, familyScientificName, genusNameZh,
+                        genusScientificName, aliases, habitats, appearance, sizeDescription,
+                        habitatDescription, distribution, description, image, displayOrder),
+                PublicationStatus.PUBLISHED, createdAt, createdAt, updatedAt);
+    }
+
+    public static FishSpecies createDraft(String slug, FishSpeciesContent content, Instant now) {
+        requireAdministratorContent(content);
+        return new FishSpecies(null, slug, content, PublicationStatus.DRAFT, null, now, now);
+    }
+
+    public static FishSpecies restore(
+            Long id,
+            String slug,
+            FishSpeciesContent content,
+            PublicationStatus status,
+            Instant publishedAt,
+            Instant createdAt,
+            Instant updatedAt) {
+        if (id == null) {
+            throw new IllegalArgumentException("id must not be null");
+        }
+        requireArgument(status, "status");
+        if ((status == PublicationStatus.DRAFT) != (publishedAt == null)) {
+            throw new IllegalArgumentException("publishedAt must match publication status");
+        }
+        return new FishSpecies(id, slug, content, status, publishedAt, createdAt, updatedAt);
+    }
+
+    public FishSpecies edit(FishSpeciesContent content, Instant now) {
+        requireAdministratorContent(content);
+        return new FishSpecies(id, slug, content, status, publishedAt, createdAt, now);
+    }
+
+    public FishSpecies publish(Instant now) {
+        if (status != PublicationStatus.DRAFT && status != PublicationStatus.UNPUBLISHED) {
+            throw new InvalidPublicationTransitionException(status, PublicationStatus.PUBLISHED);
+        }
+        return new FishSpecies(id, slug, content, PublicationStatus.PUBLISHED, now, createdAt, now);
+    }
+
+    public FishSpecies unpublish(Instant now) {
+        if (status != PublicationStatus.PUBLISHED) {
+            throw new InvalidPublicationTransitionException(status, PublicationStatus.UNPUBLISHED);
+        }
+        return new FishSpecies(id, slug, content, PublicationStatus.UNPUBLISHED, publishedAt, createdAt, now);
+    }
+
+    public Long id() { return id; }
+    public String slug() { return slug; }
+    public FishSpeciesContent content() { return content; }
+    public PublicationStatus status() { return status; }
+    public Instant publishedAt() { return publishedAt; }
+    public Instant createdAt() { return createdAt; }
+    public Instant updatedAt() { return updatedAt; }
+    public String commonNameZh() { return content.commonNameZh(); }
+    public String scientificName() { return content.scientificName(); }
+    public String familyNameZh() { return content.familyNameZh(); }
+    public String familyScientificName() { return content.familyScientificName(); }
+    public String genusNameZh() { return content.genusNameZh(); }
+    public String genusScientificName() { return content.genusScientificName(); }
+    public List<String> aliases() { return content.aliases(); }
+    public Set<HabitatType> habitats() { return content.habitats(); }
+    public String appearance() { return content.appearance(); }
+    public String sizeDescription() { return content.sizeDescription(); }
+    public String habitatDescription() { return content.habitatDescription(); }
+    public String distribution() { return content.distribution(); }
+    public String description() { return content.description(); }
+    public ImageAttribution image() { return content.image(); }
+    public int displayOrder() { return content.displayOrder(); }
+
+    private static String requireCanonicalSlug(String slug) {
+        if (slug == null
+                || slug.codePointCount(0, slug.length()) > 120
+                || !slug.matches("[a-z0-9]+(?:-[a-z0-9]+)*")) {
+            throw new InvalidFishSpeciesException("slug must be canonical");
+        }
+        return slug;
+    }
+
+    private static <T> T requireArgument(T value, String field) {
+        if (value == null) {
+            throw new IllegalArgumentException(field + " must not be null");
+        }
+        return value;
+    }
+
+    private static void requireAdministratorContent(FishSpeciesContent content) {
+        if (content == null) {
+            throw new InvalidFishSpeciesException("content must not be null");
         }
     }
 }
