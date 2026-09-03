@@ -47,6 +47,20 @@ class AdminAuthorizationTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
+    void adminRootPassesTheRoleBoundary() throws Exception {
+        mvc.perform(get("/api/v1/admin"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void unrelatedMissingCatalogRouteRetainsGenericInternalErrorEnvelope() throws Exception {
+        mvc.perform(get("/api/v1/fish/unmatched/path"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
     void adminWriteWithoutCsrfIsRejectedBeforeRouting() throws Exception {
         mvc.perform(post("/api/v1/admin/fishes")
                         .contentType(APPLICATION_JSON)

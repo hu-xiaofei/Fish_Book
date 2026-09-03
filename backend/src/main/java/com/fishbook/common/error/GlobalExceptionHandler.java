@@ -274,8 +274,14 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
-    ResponseEntity<Void> handleMissingResource(NoResourceFoundException exception) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+    ResponseEntity<?> handleMissingResource(
+            NoResourceFoundException exception,
+            HttpServletRequest request) {
+        String path = request.getRequestURI();
+        if ("/api/v1/admin".equals(path) || path.startsWith("/api/v1/admin/")) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+        return handleUnexpected(exception, request);
     }
 
     @ExceptionHandler(Exception.class)
