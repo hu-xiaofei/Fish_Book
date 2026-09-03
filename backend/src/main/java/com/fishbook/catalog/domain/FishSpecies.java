@@ -2,6 +2,7 @@ package com.fishbook.catalog.domain;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 public final class FishSpecies {
@@ -107,6 +108,39 @@ public final class FishSpecies {
     public String description() { return content.description(); }
     public ImageAttribution image() { return content.image(); }
     public int displayOrder() { return content.displayOrder(); }
+
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof FishSpecies fish)) {
+            return false;
+        }
+        return Objects.equals(id, fish.id)
+                && Objects.equals(slug, fish.slug)
+                && Objects.equals(content, fish.content)
+                && status == fish.status
+                && Objects.equals(publishedAt, fish.publishedAt)
+                && Objects.equals(createdAt, fish.createdAt)
+                && Objects.equals(updatedAt, fish.updatedAt);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, slug, content, status, publishedAt, createdAt, updatedAt);
+    }
+
+    @Override
+    public String toString() {
+        return "FishSpecies[id=" + id
+                + ", slug=" + slug
+                + ", content=" + content
+                + ", status=" + status
+                + ", publishedAt=" + publishedAt
+                + ", createdAt=" + createdAt
+                + ", updatedAt=" + updatedAt + "]";
+    }
 
     private static String requireCanonicalSlug(String slug) {
         if (slug == null
