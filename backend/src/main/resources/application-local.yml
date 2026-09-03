@@ -7,6 +7,12 @@ spring:
     enabled: true
 
 fishbook:
+  admin:
+    bootstrap:
+      enabled: ${FISHBOOK_ADMIN_BOOTSTRAP_ENABLED:false}
+      email: ${FISHBOOK_ADMIN_EMAIL:}
+      password: ${FISHBOOK_ADMIN_PASSWORD:}
+      nickname: ${FISHBOOK_ADMIN_NICKNAME:}
   media:
     enabled: ${FISHBOOK_MEDIA_ENABLED:true}
     endpoint: ${FISHBOOK_MEDIA_ENDPOINT:http://localhost:9000}

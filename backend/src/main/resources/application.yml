@@ -14,6 +14,9 @@ spring:
       initialize-schema: never
 
 fishbook:
+  admin:
+    bootstrap:
+      enabled: false
   media:
     enabled: false
 

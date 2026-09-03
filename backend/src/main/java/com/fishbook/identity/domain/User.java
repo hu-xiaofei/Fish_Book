@@ -39,6 +39,22 @@ public record User(
                 now);
     }
 
+    public static User initializeAdmin(
+            String normalizedEmail,
+            String passwordHash,
+            String nickname,
+            Instant now) {
+        return new User(
+                null,
+                normalizedEmail,
+                passwordHash,
+                nickname,
+                UserRole.ADMIN,
+                UserStatus.ACTIVE,
+                now,
+                now);
+    }
+
     public static User reconstitute(
             Long id,
             String normalizedEmail,

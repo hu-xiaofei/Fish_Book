@@ -108,6 +108,7 @@ public class SecurityConfig {
                 PathPatternRequestMatcher.pathPattern("/api/v1/me/**"),
                 PathPatternRequestMatcher.pathPattern("/api/v1/favorites/**"),
                 PathPatternRequestMatcher.pathPattern("/api/v1/catches/**"),
+                PathPatternRequestMatcher.pathPattern("/api/v1/admin/**"),
                 PathPatternRequestMatcher.pathPattern("/api/v1/auth/logout"));
         AccessDeniedHandler accessDeniedHandler = (request, response, exception) -> {
             if (exception instanceof CsrfException) {
@@ -154,6 +155,7 @@ public class SecurityConfig {
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/csrf")
                         .permitAll()
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers(authenticationRequiredEndpoints)
                         .authenticated()
                         .anyRequest().denyAll())
