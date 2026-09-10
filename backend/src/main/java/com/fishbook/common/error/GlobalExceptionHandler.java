@@ -1,7 +1,10 @@
 package com.fishbook.common.error;
 
+import com.fishbook.administration.application.InvalidAdminFishQueryException;
 import com.fishbook.catalog.application.InvalidCatalogQueryException;
 import com.fishbook.catalog.domain.FishNotFoundException;
+import com.fishbook.catalog.domain.InvalidFishSpeciesException;
+import com.fishbook.catalog.domain.InvalidPublicationTransitionException;
 import com.fishbook.catchlog.application.InvalidCatchRecordQueryException;
 import com.fishbook.catchlog.application.CatchPhotoNotFoundException;
 import com.fishbook.catchlog.domain.CatchRecordNotFoundException;
@@ -48,6 +51,42 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST,
                 exception.code(),
                 "Catalog query is invalid",
+                List.of(),
+                request);
+    }
+
+    @ExceptionHandler(InvalidAdminFishQueryException.class)
+    ResponseEntity<ApiErrorResponse> handleInvalidAdminFishQuery(
+            InvalidAdminFishQueryException exception,
+            HttpServletRequest request) {
+        return error(
+                HttpStatus.BAD_REQUEST,
+                "INVALID_CATALOG_QUERY",
+                "Catalog query is invalid",
+                List.of(),
+                request);
+    }
+
+    @ExceptionHandler(InvalidPublicationTransitionException.class)
+    ResponseEntity<ApiErrorResponse> handleInvalidPublicationTransition(
+            InvalidPublicationTransitionException exception,
+            HttpServletRequest request) {
+        return error(
+                HttpStatus.CONFLICT,
+                exception.code(),
+                "Fish publication transition is invalid",
+                List.of(),
+                request);
+    }
+
+    @ExceptionHandler(InvalidFishSpeciesException.class)
+    ResponseEntity<ApiErrorResponse> handleInvalidFishSpecies(
+            InvalidFishSpeciesException exception,
+            HttpServletRequest request) {
+        return error(
+                HttpStatus.BAD_REQUEST,
+                exception.code(),
+                "Fish content is invalid",
                 List.of(),
                 request);
     }
@@ -156,15 +195,23 @@ public class GlobalExceptionHandler {
     ResponseEntity<ApiErrorResponse> handleDuplicateConstraint(
             DataIntegrityViolationException exception,
             HttpServletRequest request) {
-        if (!causedByDuplicateEmailConstraint(exception)) {
-            return handleUnexpected(exception, request);
+        if (causedByDuplicateEmailConstraint(exception)) {
+            return error(
+                    HttpStatus.CONFLICT,
+                    "DUPLICATE_EMAIL",
+                    "An account with that email already exists",
+                    List.of(),
+                    request);
         }
-        return error(
-                HttpStatus.CONFLICT,
-                "DUPLICATE_EMAIL",
-                "An account with that email already exists",
-                List.of(),
-                request);
+        if (causedByCatalogUniqueConstraint(exception)) {
+            return error(
+                    HttpStatus.CONFLICT,
+                    "CATALOG_ENTRY_CONFLICT",
+                    "A fish catalog entry already exists",
+                    List.of(),
+                    request);
+        }
+        return handleUnexpected(exception, request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -298,11 +345,26 @@ public class GlobalExceptionHandler {
     }
 
     private static boolean causedByDuplicateEmailConstraint(Throwable exception) {
+        return causedByConstraint(exception, "uk_users_email");
+    }
+
+    private static boolean causedByCatalogUniqueConstraint(Throwable exception) {
+        return causedByConstraint(
+                exception,
+                "uk_fish_species_slug",
+                "uk_fish_species_common_name_zh",
+                "uk_fish_species_scientific_name");
+    }
+
+    private static boolean causedByConstraint(Throwable exception, String... constraintNames) {
         Throwable current = exception;
         while (current != null) {
-            if (current.getMessage() != null
-                    && current.getMessage().contains("uk_users_email")) {
-                return true;
+            if (current.getMessage() != null) {
+                for (String constraintName : constraintNames) {
+                    if (current.getMessage().contains(constraintName)) {
+                        return true;
+                    }
+                }
             }
             current = current.getCause();
         }

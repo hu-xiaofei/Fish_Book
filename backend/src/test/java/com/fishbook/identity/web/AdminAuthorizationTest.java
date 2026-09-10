@@ -42,7 +42,9 @@ class AdminAuthorizationTest {
     @WithMockUser(roles = "ADMIN")
     void adminPassesTheRoleBoundary() throws Exception {
         mvc.perform(get("/api/v1/admin/fishes"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items").isArray())
+                .andExpect(jsonPath("$.size").value(20));
     }
 
     @Test

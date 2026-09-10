@@ -103,6 +103,17 @@ class JpaFishRepositoryAdapterTest {
     }
 
     @Test
+    void savesPublicationStateChangeWhileRetainingExistingAliasesAndHabitats() {
+        FishSpecies saved = adapter.save(FishSpecies.createDraft("published-fish", validContent(), NOW));
+
+        FishSpecies published = adapter.save(saved.publish(LATER));
+
+        assertThat(published.status()).isEqualTo(PublicationStatus.PUBLISHED);
+        assertThat(published.aliases()).containsExactly("测试别名");
+        assertThat(published.habitats()).containsExactly(HabitatType.RIVER);
+    }
+
+    @Test
     void searchesByCommonName() {
         assertThat(adapter.searchPublished(new FishSearchCriteria("鲤", null, null, 0, 12)).items())
                 .extracting(FishSpecies::slug)

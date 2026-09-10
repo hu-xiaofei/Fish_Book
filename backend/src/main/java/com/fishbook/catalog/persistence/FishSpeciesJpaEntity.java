@@ -132,10 +132,15 @@ class FishSpeciesJpaEntity {
         publishedAt = fish.publishedAt();
         createdAt = fish.createdAt();
         updatedAt = fish.updatedAt();
-        aliases.clear();
-        fish.aliases().forEach(alias -> aliases.add(new FishAliasJpaEntity(this, alias)));
-        habitats.clear();
-        fish.habitats().forEach(habitat -> habitats.add(new FishHabitatJpaEntity(this, habitat)));
+        aliases.removeIf(alias -> !fish.aliases().contains(alias.getAlias()));
+        fish.aliases().stream()
+                .filter(alias -> aliases.stream().noneMatch(existing -> existing.getAlias().equals(alias)))
+                .forEach(alias -> aliases.add(new FishAliasJpaEntity(this, alias)));
+        habitats.removeIf(habitat -> !fish.habitats().contains(habitat.getId().getHabitatCode()));
+        fish.habitats().stream()
+                .filter(habitat -> habitats.stream()
+                        .noneMatch(existing -> existing.getId().getHabitatCode() == habitat))
+                .forEach(habitat -> habitats.add(new FishHabitatJpaEntity(this, habitat)));
     }
 
     Long getId() { return id; }
