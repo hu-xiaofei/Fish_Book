@@ -14,7 +14,14 @@ function normalizeStatus(value: string | null): PublicationStatus | '' {
 }
 
 function normalizePage(value: string | number | null | undefined): number {
-  const page = typeof value === 'number' ? value : Number(value?.trim() ?? '');
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  }
+
+  const decimalPage = value?.trim() ?? '';
+  if (!/^\d+$/.test(decimalPage)) return 0;
+
+  const page = Number(decimalPage);
   return Number.isSafeInteger(page) && page >= 0 ? page : 0;
 }
 

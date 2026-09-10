@@ -25,3 +25,10 @@ test('normalizes invalid pages and caps keywords at 100 code points', () => {
   expect(parseAdminFishSearchParams(new URLSearchParams('page=9007199254740992')))
     .toMatchObject({ page: 0 });
 });
+
+test('rejects non-decimal page syntaxes accepted by JavaScript number coercion', () => {
+  for (const page of ['1e2', '0x10', '2.0']) {
+    expect(parseAdminFishSearchParams(new URLSearchParams(`page=${page}`)))
+      .toMatchObject({ page: 0 });
+  }
+});
