@@ -61,7 +61,7 @@ test('shows client validation errors without sending invalid content', async () 
 
 test('maps backend aliases and known flat field errors to their form controls', async () => {
   const onSubmit = vi.fn().mockRejectedValue(new ApiError(400, {
-    code: 'INVALID_FISH', message: 'internal detail', requestId: 'request',
+    code: 'VALIDATION_FAILED', message: 'internal detail', requestId: 'request',
     fieldErrors: [{ field: 'aliases', message: '别名不可重复' }, { field: 'commonNameZh', message: '中文名不可用' }],
   }));
   const { user } = renderForm({ onSubmit });
@@ -69,6 +69,21 @@ test('maps backend aliases and known flat field errors to their form controls', 
 
   expect(await screen.findByText('别名不可重复')).toBeInTheDocument();
   expect(screen.getByText('中文名不可用')).toBeInTheDocument();
+});
+
+test.each([
+  [500, 'INTERNAL_ERROR'],
+  [400, 'UNKNOWN_FAILURE'],
+])('does not expose known field errors from unsafe %s %s responses', async (status, code) => {
+  const onSubmit = vi.fn().mockRejectedValue(new ApiError(status, {
+    code, message: 'internal detail', requestId: 'request',
+    fieldErrors: [{ field: 'commonNameZh', message: '数据库字段错误' }],
+  }));
+  const { user } = renderForm({ onSubmit });
+  await user.click(screen.getByRole('button', { name: '保存修改' }));
+
+  expect(await screen.findByText('保存鱼类资料失败，请稍后重试')).toBeInTheDocument();
+  expect(screen.queryByText('数据库字段错误')).not.toBeInTheDocument();
 });
 
 test('shows a conflict message and never exposes generic backend details', async () => {

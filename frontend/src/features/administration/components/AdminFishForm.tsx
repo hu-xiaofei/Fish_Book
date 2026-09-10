@@ -81,14 +81,17 @@ export function AdminFishForm({
       await onSubmit(input);
     } catch (error) {
       if (error instanceof ApiError) {
-        let mapped = false;
-        error.body.fieldErrors.forEach((fieldError) => {
-          const field = fieldError.field === 'aliases' ? 'aliasesText' : fieldError.field;
-          if (!formFields.has(field as keyof AdminFishFormValues)) return;
-          mapped = true;
-          setError(field as FieldPath<AdminFishFormValues>, { type: 'server', message: fieldError.message });
-        });
-        if (mapped || isConfirmedUnauthorized(error)) return;
+        if (error.status === 400 && error.body.code === 'VALIDATION_FAILED') {
+          let mapped = false;
+          error.body.fieldErrors.forEach((fieldError) => {
+            const field = fieldError.field === 'aliases' ? 'aliasesText' : fieldError.field;
+            if (!formFields.has(field as keyof AdminFishFormValues)) return;
+            mapped = true;
+            setError(field as FieldPath<AdminFishFormValues>, { type: 'server', message: fieldError.message });
+          });
+          if (mapped) return;
+        }
+        if (isConfirmedUnauthorized(error)) return;
         if (error.body.code === 'CATALOG_ENTRY_CONFLICT') {
           setServerError('Slug、中文名或学名已被使用');
           return;
