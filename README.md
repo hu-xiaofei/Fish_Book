@@ -8,13 +8,13 @@
 
 ### 项目简介
 
-FishBook 是一个面向中国淡水鱼知识学习的全栈鱼类图鉴项目，也是一套用于练习真实软件工程流程的学习型应用。项目目前提供公开只读鱼类图鉴、完整的用户身份闭环、登录用户私有收藏，以及带可选私有照片的钓获记录，并通过同源部署将 React 前端与 Spring Boot API 统一运行在一个地址下。
+FishBook 是一个面向中国淡水鱼知识学习的全栈鱼类图鉴项目，也是一套用于练习真实软件工程流程的学习型应用。项目目前提供公开鱼类图鉴、完整的用户身份闭环、登录用户私有收藏、带可选私有照片的钓获记录，以及受角色保护的图鉴管理闭环，并通过同源部署将 React 前端与 Spring Boot API 统一运行在一个地址下。
 
 当前版本收录 12 种经过整理的常见淡水鱼：鲫、鲤、草鱼、青鱼、鲢、鳙、乌鳢、鳜、黄颡鱼、团头鲂、翘嘴鲌和泥鳅。鱼类图片均保存在项目中，并记录来源、作者和许可证信息。
 
 ### 项目状态
 
-当前个人产品闭环已交付身份、公开图鉴、按账号隔离的私有收藏，以及带可选私有照片的钓获记录。照片由私有 MinIO 存储，上传、读取、替换和移除都受记录所有权校验，同时保持公开图鉴的只读边界。
+当前产品闭环已交付身份、公开图鉴、按账号隔离的私有收藏、带可选私有照片的钓获记录，以及管理员图鉴维护。照片由私有 MinIO 存储，上传、读取、替换和移除都受记录所有权校验；图鉴写入则只允许管理员执行。
 
 ### 当前功能
 
@@ -50,7 +50,14 @@ FishBook 是一个面向中国淡水鱼知识学习的全栈鱼类图鉴项目�
 - 照片仅通过需要登录且校验所有权的后端接口读取；不存在的照片和其他用户的照片都返回统一的未找到结果。
 - 新建时照片上传失败不会撤销已经保存的记录，用户可在详情页重试。
 
-图鉴内容目前保持公开只读。管理员后台、图鉴新增与编辑尚未实现。
+**管理员图鉴管理**
+
+- 可选的首次启动引导会创建本地管理员；管理列表、新建和编辑路由分别为 `/admin/fishes`、`/admin/fishes/new` 和 `/admin/fishes/{id}/edit`。
+- 管理员可以新建草稿、编辑内容、发布和下架鱼类；草稿与已下架条目不会出现在公开搜索或公开详情中。
+- `/api/v1/admin/**` 同时执行登录、管理员角色和 CSRF 校验；普通用户在本地管理页面看到“没有管理员权限”，API 请求得到 `403`。
+- 管理员功能只维护公开图鉴，绝不能读取、展示或修改其他用户的私有钓获记录、收藏或照片。
+
+图鉴封面上传、鱼类条目的物理删除和复杂 RBAC 不在当前范围内；当前图鉴仍使用仓库内经过来源审计的公开图片。
 
 ### 技术栈
 
@@ -70,13 +77,13 @@ Node.js 版本固定为 `24.18.0`。前端和端到端测试依赖均通过各�
 ```text
 浏览器
   → Nginx + React 单页应用
-  → Spring Boot API（identity、catalog、favorites、catchlog）
+  → Spring Boot API（identity、catalog、administration、favorites、catchlog）
       → MySQL（业务数据、会话、媒体清理任务）
       → MinIO（私有钓获照片）
 ```
 
 - Nginx 在 `http://localhost:8080` 提供前端，并将 `/api` 和 `/actuator` 转发到内部后端服务。
-- Spring Boot 按领域、应用、持久化和 Web 边界组织 identity、catalog、favorites 与 catchlog 功能。
+- Spring Boot 按领域、应用、持久化和 Web 边界组织 identity、catalog、administration、favorites 与 catchlog 功能。
 - Flyway 管理数据库表结构和首批鱼类数据迁移。
 - Spring Session 将登录会话保存到 MySQL。
 - MinIO 保存按用户和记录隔离的私有钓获照片；浏览器不能依赖公开对象地址，只能通过所有者鉴权后的后端接口读取。
@@ -105,6 +112,19 @@ docker compose -f compose.yaml -f compose.full.yaml ps
 
 `.env` 仅用于本地开发，请勿提交到 Git。等待 MySQL、MinIO 和后端显示为健康状态后，打开 [http://localhost:8080/](http://localhost:8080/)。
 
+首次本地启动时，`.env.example` 包含以下仅供开发使用的管理员引导样例：
+
+```dotenv
+FISHBOOK_ADMIN_BOOTSTRAP_ENABLED=true
+FISHBOOK_ADMIN_EMAIL=admin@fishbook.local
+FISHBOOK_ADMIN_PASSWORD=fishbook_admin_local_only
+FISHBOOK_ADMIN_NICKNAME=本地管理员
+```
+
+应用配置默认关闭管理员引导；完整 Compose 栈会把上述 `.env` 值传给后端。首次启动完成后，在 `/login` 使用样例账号登录，并从导航进入 `/admin/fishes`。确认管理员已创建后，建议把 `FISHBOOK_ADMIN_BOOTSTRAP_ENABLED` 改为 `false` 并重启。若邮箱已属于管理员，后续启动是安全的无操作；若同一邮箱已属于普通用户，后端会拒绝启动，且不会提升该账号权限。
+
+这些值不是生产凭据。生产环境必须从部署平台的密钥存储注入独立强密码，绝不能把生产秘密写入或提交 `.env` 文件。
+
 停止服务但保留 MySQL 和 MinIO 数据卷：
 
 ```bash
@@ -123,6 +143,7 @@ docker compose -f compose.yaml -f compose.full.yaml down
 | 我的收藏 | [http://localhost:8080/favorites](http://localhost:8080/favorites) |
 | 钓获记录 | [http://localhost:8080/catches](http://localhost:8080/catches) |
 | 新建钓获记录 | [http://localhost:8080/catches/new](http://localhost:8080/catches/new) |
+| 图鉴管理 | [http://localhost:8080/admin/fishes](http://localhost:8080/admin/fishes) |
 | 健康检查 | [http://localhost:8080/actuator/health](http://localhost:8080/actuator/health) |
 
 ### 测试与验证
@@ -137,7 +158,7 @@ cd .. && docker compose --env-file .env.example -f compose.yaml -f compose.full.
 ```
 
 - 后端测试使用 Testcontainers 启动真实 MySQL，因此需要 Docker 正在运行。
-- Playwright 测试需要先通过完整 Docker Compose 命令启动应用，并覆盖身份、公开图鉴、私有收藏、钓获记录，以及私有照片上传、隔离、替换和移除主流程。
+- Playwright 测试需要先通过完整 Docker Compose 命令启动应用，并覆盖身份、公开图鉴、管理员草稿/发布/下架与权限拒绝、私有收藏、钓获记录，以及私有照片上传、隔离、替换和移除主流程。
 - 以上是与 CI 覆盖范围一致的本地验证流程。GitHub Actions 会在推送到 `main` 和 Pull Request 时执行后端、前端、Docker 与端到端测试；Linux CI 还会使用 Maven 批处理模式、安装 Playwright 系统依赖，并在端到端测试前启动和等待完整服务栈。
 
 ### 项目结构
@@ -154,10 +175,10 @@ Fish_Book/
 
 ### 当前范围与后续方向
 
-当前交付已包含稳定的身份系统、公开只读图鉴、登录用户私有收藏，以及带可选私有照片的钓获记录 CRUD。下一阶段可以继续开发：
+当前交付已包含稳定的身份系统、公开图鉴、管理员初始化与角色授权、管理员鱼类新增/编辑/发布/下架、登录用户私有收藏，以及带可选私有照片的钓获记录 CRUD。下一阶段可以继续开发：
 
-- 管理员账号初始化和基于角色的权限控制；
-- 鱼类新增、编辑、发布和下架；
+- 管理员图鉴封面上传和鱼类条目物理删除；
+- 更复杂的 RBAC 与生产部署、安全密钥轮换和备份方案；
 - 私有媒体备份、容量监控和运维告警。
 
 仓库目前没有项目级应用许可证文件，因此不要据此推断应用代码的开源授权。鱼类图片使用各自的开放许可证，详情见图片来源记录。
@@ -180,13 +201,13 @@ Fish_Book/
 
 ### Overview
 
-FishBook is a learning-oriented full-stack fish encyclopedia focused on Chinese freshwater fish and on practicing a realistic software engineering workflow. The current application provides a public read-only fish catalog, a complete identity flow, private favorites, and catch records with optional private photos, with the React frontend and Spring Boot API served from the same origin.
+FishBook is a learning-oriented full-stack fish encyclopedia focused on Chinese freshwater fish and on practicing a realistic software engineering workflow. The current application provides a public fish catalog, a complete identity flow, private favorites, catch records with optional private photos, and a role-protected catalog-management loop, with the React frontend and Spring Boot API served from the same origin.
 
 The catalog currently contains 12 curated freshwater species: crucian carp, common carp, grass carp, black carp, silver carp, bighead carp, northern snakehead, mandarin fish, yellow catfish, Wuchang bream, topmouth culter, and weather loach. Every catalog image is stored locally with recorded source, author, and license metadata.
 
 ### Project Status
 
-The current personal-product loop delivers identity, a public catalog, account-isolated private favorites, and catch records with optional private photos. Photos are stored in a private MinIO bucket, and upload, retrieval, replacement, and removal all enforce record ownership while preserving the public catalog's read-only boundary.
+The current product loop delivers identity, a public catalog, account-isolated private favorites, catch records with optional private photos, and administrator catalog maintenance. Photos are stored in a private MinIO bucket, and upload, retrieval, replacement, and removal all enforce record ownership; catalog writes are restricted to administrators.
 
 ### Current Features
 
@@ -222,7 +243,14 @@ The current personal-product loop delivers identity, a public catalog, account-i
 - Photos are retrieved only through an authenticated, owner-scoped backend endpoint; missing and foreign-owned photos return the same not-found result.
 - A photo upload failure during creation does not roll back the saved record, so the user can retry from its detail page.
 
-Catalog content remains read-only. The admin management UI and catalog writes are not implemented.
+**Administrator catalog management**
+
+- An optional first-start bootstrap creates the local administrator; list, create, and edit routes are `/admin/fishes`, `/admin/fishes/new`, and `/admin/fishes/{id}/edit`.
+- Administrators can create drafts, edit content, publish, and unpublish fish. Draft and unpublished entries stay absent from public search and public detail pages.
+- `/api/v1/admin/**` enforces authentication, the administrator role, and CSRF. An ordinary user sees the local “没有管理员权限” page and receives `403` from the API.
+- Administrator work is limited to the public catalog and must never expose or mutate another user's private catches, favorites, or photos.
+
+Catalog cover upload, physical fish deletion, and complex RBAC remain out of scope. The catalog continues to use audited public images stored in the repository.
 
 ### Tech Stack
 
@@ -242,13 +270,13 @@ Node.js is pinned to `24.18.0`. Frontend and end-to-end dependencies are locked 
 ```text
 Browser
   → Nginx + React SPA
-  → Spring Boot API (identity, catalog, favorites, catchlog)
+  → Spring Boot API (identity, catalog, administration, favorites, catchlog)
       → MySQL (business data, sessions, and media-cleanup jobs)
       → MinIO (private catch photos)
 ```
 
 - Nginx serves the frontend at `http://localhost:8080` and proxies `/api` and `/actuator` to the internal backend service.
-- Spring Boot separates the identity, catalog, favorites, and catchlog features across domain, application, persistence, and Web boundaries.
+- Spring Boot separates the identity, catalog, administration, favorites, and catchlog features across domain, application, persistence, and Web boundaries.
 - Flyway owns database schema and initial catalog-data migrations.
 - Spring Session stores authenticated sessions in MySQL.
 - MinIO stores private catch photos under user- and record-scoped keys. Browsers do not rely on public object URLs and retrieve photos only through the owner-authorized backend endpoint.
@@ -277,6 +305,19 @@ docker compose -f compose.yaml -f compose.full.yaml ps
 
 Keep `.env` local and never commit it. Wait until MySQL, MinIO, and the backend report healthy status, then open [http://localhost:8080/](http://localhost:8080/).
 
+For the first local start, `.env.example` contains these development-only administrator bootstrap samples:
+
+```dotenv
+FISHBOOK_ADMIN_BOOTSTRAP_ENABLED=true
+FISHBOOK_ADMIN_EMAIL=admin@fishbook.local
+FISHBOOK_ADMIN_PASSWORD=fishbook_admin_local_only
+FISHBOOK_ADMIN_NICKNAME=本地管理员
+```
+
+Administrator bootstrap is disabled by default in application configuration; the full Compose stack passes the `.env` values into the backend. After the first start, sign in at `/login` with the sample account and open `/admin/fishes` from the navigation. Once the administrator exists, set `FISHBOOK_ADMIN_BOOTSTRAP_ENABLED=false` and restart. A matching existing administrator is a safe no-op; if the email already belongs to an ordinary user, startup fails rather than promoting that account.
+
+These values are not production credentials. Production deployments must inject a separate strong password from deployment secret storage and must never store or commit production secrets in `.env` files.
+
 Stop the services while preserving the MySQL and MinIO data volumes:
 
 ```bash
@@ -295,6 +336,7 @@ docker compose -f compose.yaml -f compose.full.yaml down
 | My Favorites | [http://localhost:8080/favorites](http://localhost:8080/favorites) |
 | Catch records | [http://localhost:8080/catches](http://localhost:8080/catches) |
 | New catch record | [http://localhost:8080/catches/new](http://localhost:8080/catches/new) |
+| Catalog management | [http://localhost:8080/admin/fishes](http://localhost:8080/admin/fishes) |
 | Health endpoint | [http://localhost:8080/actuator/health](http://localhost:8080/actuator/health) |
 
 ### Tests and Verification
@@ -309,7 +351,7 @@ cd .. && docker compose --env-file .env.example -f compose.yaml -f compose.full.
 ```
 
 - Backend tests use Testcontainers with a real MySQL instance, so Docker must be running.
-- Playwright requires the full application stack to be running first and covers identity, the public catalog, private favorites, catch records, and private-photo upload, isolation, replacement, and removal.
+- Playwright requires the full application stack to be running first and covers identity, the public catalog, administrator draft/publish/unpublish behavior and access denial, private favorites, catch records, and private-photo upload, isolation, replacement, and removal.
 - The commands above are the local equivalent of the CI verification scope. GitHub Actions runs backend, frontend, Docker, and end-to-end checks for pushes to `main` and for pull requests; Linux CI additionally uses Maven batch mode, installs Playwright system dependencies, and starts and waits for the full stack before the end-to-end tests.
 
 ### Project Structure
@@ -326,10 +368,10 @@ Fish_Book/
 
 ### Current Scope and Next Steps
 
-The current delivery includes a stable identity system, a public read-only catalog, private favorites, and catch-record CRUD with optional private photos. Natural next steps include:
+The current delivery includes a stable identity system, a public catalog, administrator bootstrap and role authorization, administrator create/edit/publish/unpublish workflows, private favorites, and catch-record CRUD with optional private photos. Natural next steps include:
 
-- administrator bootstrap and role-based authorization;
-- create, edit, publish, and unpublish catalog workflows;
+- administrator catalog-cover upload and physical fish deletion;
+- more complex RBAC plus production deployment, secret rotation, and backup procedures;
 - private-media backup, capacity monitoring, and operational alerts.
 
 The repository does not currently contain a project-level application license file, so no open-source license should be inferred for the application code. Fish images retain their individual open licenses; see the attribution record for details.

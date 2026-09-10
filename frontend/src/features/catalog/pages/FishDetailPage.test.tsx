@@ -267,9 +267,10 @@ test('shows a dedicated not-found state for a 404', async () => {
     fieldErrors: [],
     requestId: 'test-request',
   }));
-  renderDetail('/fish/missing-fish');
+  renderDetail('/fish/missing-fish', 3);
 
   expect(await screen.findByRole('heading', { name: '没有找到这种鱼' })).toBeInTheDocument();
+  expect(fetchFishDetailMock).toHaveBeenCalledTimes(1);
 });
 
 test('shows a loading status while the detail request is unresolved', async () => {
@@ -291,8 +292,11 @@ test('shows a safe generic error and retries the detail request', async () => {
 
   const status = await screen.findByText('加载鱼类资料失败，请稍后重试');
   expect(status).not.toHaveTextContent('database connection failed');
+  expect(fetchFishDetailMock).toHaveBeenCalledTimes(4);
+  fetchFishDetailMock.mockResolvedValue(channaArgusDetail);
   await user.click(screen.getByRole('button', { name: '重试' }));
-  await waitFor(() => expect(fetchFishDetailMock).toHaveBeenCalledTimes(2));
+  expect(await screen.findByRole('heading', { name: '乌鳢' })).toBeInTheDocument();
+  expect(fetchFishDetailMock).toHaveBeenCalledTimes(5);
 });
 
 test('renders the image, aliases, and habitats for a successful detail', async () => {

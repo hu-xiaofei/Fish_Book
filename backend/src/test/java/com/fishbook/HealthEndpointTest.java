@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fishbook.catalog.domain.FishManagementRepository;
 import com.fishbook.catalog.domain.FishRepository;
 import com.fishbook.catchlog.domain.CatchRecordRepository;
 import com.fishbook.favorites.domain.FavoriteRepository;
@@ -25,7 +26,7 @@ class HealthEndpointTest {
     @MockitoBean
     UserRepository userRepository;
 
-    @MockitoBean
+    @MockitoBean(extraInterfaces = FishManagementRepository.class)
     FishRepository fishRepository;
 
     @MockitoBean

@@ -15,6 +15,31 @@ docker compose -f compose.yaml -f compose.full.yaml up -d --build
 
 Keep `.env` local. Do not commit its development credentials. Wait until `docker compose -f compose.yaml -f compose.full.yaml ps` reports MySQL, MinIO, and the backend as healthy, then open `http://localhost:8080`.
 
+## Local Administrator Bootstrap / 本地管理员初始化
+
+Administrator bootstrap is disabled by default in application configuration. The checked-in `.env.example` opts the full local Compose stack into a development-only first-start administrator with these values:
+
+```dotenv
+FISHBOOK_ADMIN_BOOTSTRAP_ENABLED=true
+FISHBOOK_ADMIN_EMAIL=admin@fishbook.local
+FISHBOOK_ADMIN_PASSWORD=fishbook_admin_local_only
+FISHBOOK_ADMIN_NICKNAME=本地管理员
+```
+
+应用配置默认关闭管理员初始化。仓库中的 `.env.example` 只为完整本地 Compose 栈提供以上开发样例；它们不是生产凭据。若现有 `.env` 创建于此功能之前，请手动加入并检查这四项，而不是覆盖其他本地设置。
+
+On the first healthy start, the backend creates the administrator before accepting normal use. Sign in at `http://localhost:8080/login`, then follow the “图鉴管理” link or open `http://localhost:8080/admin/fishes`. Create saves a draft; editing preserves its slug; 发布 makes the entry visible in public search and detail pages; 下架 removes it from both public boundaries while keeping it available to administrators.
+
+首次健康启动会创建管理员。在 `/login` 登录后，从“图鉴管理”进入 `/admin/fishes`。新建内容先保存为草稿；编辑保留 slug；“发布”后公开搜索和详情可见；“下架”后两处都不可见，但管理员仍可继续维护。
+
+After confirming the administrator exists, set `FISHBOOK_ADMIN_BOOTSTRAP_ENABLED=false` and restart the backend. If the configured email already belongs to an `ADMIN`, bootstrap is a no-op. If it belongs to an ordinary `USER`, startup fails rather than silently promoting that account; choose a different dedicated administrator email or deliberately resolve the account state before retrying.
+
+确认管理员已经创建后，建议将 `FISHBOOK_ADMIN_BOOTSTRAP_ENABLED` 改为 `false` 并重启后端。已有管理员使用同一邮箱时初始化不会重复修改；同一邮箱若属于普通用户，启动会失败且不会自动提权，应先选择独立管理员邮箱或明确处理账号冲突。
+
+Production deployments must inject the email, nickname, and a unique strong password from deployment secret storage. Never place production secrets in a committed `.env` file. Catalog cover upload, physical fish deletion, and complex RBAC remain out of scope. Administrator work is restricted to public catalog content and must never expose or mutate another user's private catches, favorites, or photos.
+
+生产部署必须通过部署平台的密钥存储注入管理员邮箱、昵称和独立强密码，绝不能在提交的 `.env` 中保存生产秘密。图鉴封面上传、鱼类物理删除和复杂 RBAC 仍不在当前范围内。管理员操作仅限公开图鉴，绝不能暴露或修改其他用户的私有钓获记录、收藏或照片。
+
 ## Normal Start and Stop
 
 Start or refresh the complete same-origin stack:
@@ -78,7 +103,7 @@ curl -fsS 'http://localhost:8080/api/v1/fish/channa-argus'
 curl -I 'http://localhost:8080/images/fish/channa-argus.jpg'
 ```
 
-Each API request should return JSON without a login session. The image response should be `200 OK` with an `image/jpeg` content type. Catalog writes and image uploads are intentionally unavailable; the catalog and its local image assets are read-only.
+Each API request should return JSON without a login session. The image response should be `200 OK` with an `image/jpeg` content type. Catalog writes are available only through the administrator routes described above. Catalog cover upload and physical deletion remain unavailable; public images continue to be audited local assets.
 
 If a catalog endpoint is unavailable after an image rebuild, check the public health endpoint and backend logs first:
 
@@ -222,4 +247,4 @@ cd ../e2e && npm ci && npx playwright install chromium && npm test
 cd .. && docker compose -f compose.yaml -f compose.full.yaml config --quiet
 ```
 
-The Playwright acceptance suite proves registration, login, JDBC-backed session restoration after reload, nickname persistence, logout, protected-route redirection, the public catalog, private favorites, catch-record CRUD, and private-photo upload, owner isolation, reload, replacement, and removal.
+The Playwright acceptance suite proves registration, login, JDBC-backed session restoration after reload, nickname persistence, logout, protected-route redirection, the public catalog, the administrator draft/publish/unpublish visibility loop, ordinary-user UI and API denial, private favorites, catch-record CRUD, and private-photo upload, owner isolation, reload, replacement, and removal.

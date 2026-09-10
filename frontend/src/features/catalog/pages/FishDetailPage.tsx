@@ -43,6 +43,11 @@ export function FishDetailPage() {
     queryKey: fishDetailQueryKey(slug ?? ''),
     queryFn: () => fetchFishDetail(slug ?? ''),
     enabled: Boolean(slug),
+    retry: (failureCount, error) => !(
+      error instanceof ApiError
+      && error.status === 404
+      && error.body.code === 'FISH_NOT_FOUND'
+    ) && failureCount < 3,
   });
   const currentUser = useQuery({
     ...currentUserQueryConfig,
