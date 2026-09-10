@@ -11,6 +11,8 @@ import { CatchNewPage } from '../features/catchlog/pages/CatchNewPage';
 import { CatchDetailPage } from '../features/catchlog/pages/CatchDetailPage';
 import { CatchEditPage } from '../features/catchlog/pages/CatchEditPage';
 import { AdminFishListPage } from '../features/administration/pages/AdminFishListPage';
+import { AdminFishNewPage } from '../features/administration/pages/AdminFishNewPage';
+import { AdminFishEditPage } from '../features/administration/pages/AdminFishEditPage';
 import { App } from './App';
 
 export const router = createBrowserRouter([
@@ -75,6 +77,22 @@ export const router = createBrowserRouter([
     element: (
       <AdminRoute>
         <AdminFishListPage />
+      </AdminRoute>
+    ),
+  },
+  {
+    path: '/admin/fishes/new',
+    element: (
+      <AdminRoute>
+        <AdminFishNewPage />
+      </AdminRoute>
+    ),
+  },
+  {
+    path: '/admin/fishes/:id/edit',
+    element: (
+      <AdminRoute>
+        <AdminFishEditPage />
       </AdminRoute>
     ),
   },

@@ -9,10 +9,9 @@ import {
 import { SessionNav } from '../../auth/components/SessionNav';
 import { useSessionExpiry } from '../../auth/hooks/useExpireSessionOnUnauthorized';
 import {
-  fetchFishPage,
-  fishListQueryKey,
+  fetchAllPublishedFishOptions,
+  fishOptionsQueryKey,
 } from '../../catalog/api/catalogApi';
-import type { CatalogFilters } from '../../catalog/model/types';
 import {
   CATCHES_QUERY_KEY,
   catchDetailQueryKey,
@@ -27,8 +26,6 @@ import { CatchRecordForm } from '../components/CatchRecordForm';
 import type { CatchRecordDetail, CatchRecordInput } from '../model/types';
 import styles from './CatchPages.module.css';
 
-const catalogFilters: CatalogFilters = { q: '', family: '', habitat: '', page: 0 };
-
 export function CatchNewPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -41,8 +38,8 @@ export function CatchNewPage() {
     sessionGeneration: number;
   }>();
   const catalogQuery = useQuery({
-    queryKey: fishListQueryKey(catalogFilters),
-    queryFn: () => fetchFishPage(catalogFilters),
+    queryKey: fishOptionsQueryKey,
+    queryFn: () => fetchAllPublishedFishOptions(),
     enabled: !sessionExpired,
     retry: (failureCount, error) => !isConfirmedUnauthorized(error) && failureCount < 2,
   });
@@ -178,7 +175,7 @@ export function CatchNewPage() {
             ) : <p>支持 JPEG、PNG、WebP，最大 10 MB。</p>}
           </section>
           <CatchRecordForm
-            fishOptions={catalogQuery.data.items.map((fish) => ({
+            fishOptions={catalogQuery.data.map((fish) => ({
               slug: fish.slug,
               commonNameZh: fish.commonNameZh,
             }))}

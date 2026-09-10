@@ -99,9 +99,49 @@
   background: #f4faf7;
 }
 
+.formPanel {
+  max-width: 58rem;
+}
+
+.formPanel form {
+  display: grid;
+  gap: 1rem;
+}
+
+.formPanel fieldset {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem 1rem;
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid #c9d9d1;
+  border-radius: 0.75rem;
+}
+
+.formPanel legend { padding: 0 0.35rem; font-weight: 700; }
+.formPanel fieldset > div { display: grid; gap: 0.35rem; }
+.formPanel fieldset > div:has(textarea) { grid-column: 1 / -1; }
+.formPanel input, .formPanel textarea, .formPanel button, .actionBar button {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #89a79b;
+  border-radius: 0.4rem;
+  background: #fff;
+  font: inherit;
+}
+.formPanel textarea { min-height: 6rem; resize: vertical; }
+.formPanel input[type='checkbox'] { width: auto; min-height: auto; }
+.formPanel label:has(input[type='checkbox']) { display: inline-flex; align-items: center; gap: 0.35rem; margin-right: 0.75rem; }
+.formPanel input:focus-visible, .formPanel textarea:focus-visible, .formPanel button:focus-visible, .actionBar button:focus-visible { outline: 3px solid #e4a11b; outline-offset: 3px; }
+.actionBar { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
+.actionBar button { width: auto; color: #075f4b; font-weight: 600; }
+
 @media (max-width: 40rem) {
   .page { padding: 1rem; }
   .header, .controls { display: grid; grid-template-columns: 1fr; }
+  .formPanel fieldset { grid-template-columns: 1fr; }
   .controls form div { grid-template-columns: 1fr; }
   .pagination nav { justify-content: center; }
 }

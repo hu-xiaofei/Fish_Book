@@ -9,8 +9,8 @@ import {
 } from '../../auth/api/sessionCache';
 import { SessionNav } from '../../auth/components/SessionNav';
 import { useSessionExpiry } from '../../auth/hooks/useExpireSessionOnUnauthorized';
-import { fetchFishPage, fishListQueryKey } from '../../catalog/api/catalogApi';
-import type { CatalogFilters } from '../../catalog/model/types';
+import { fetchAllPublishedFishOptions, fishOptionsQueryKey } from '../../catalog/api/catalogApi';
+import type { FishSummary } from '../../catalog/model/types';
 import {
   CATCHES_QUERY_KEY,
   catchDetailQueryKey,
@@ -20,8 +20,6 @@ import {
 import { CatchRecordForm } from '../components/CatchRecordForm';
 import type { CatchRecordDetail } from '../model/types';
 import styles from './CatchPages.module.css';
-
-const catalogFilters: CatalogFilters = { q: '', family: '', habitat: '', page: 0 };
 
 function parseCatchId(value: string | undefined): number | undefined {
   if (!value || !/^\d+$/.test(value)) return undefined;
@@ -48,6 +46,12 @@ function formValues(catchRecord: CatchRecordDetail) {
   };
 }
 
+function fishOptionsForEdit(catalog: FishSummary[], catchRecord: CatchRecordDetail) {
+  const published = catalog.map((fish) => ({ slug: fish.slug, commonNameZh: fish.commonNameZh }));
+  if (published.some((fish) => fish.slug === catchRecord.fishSlug)) return published;
+  return [{ slug: catchRecord.fishSlug, commonNameZh: `${catchRecord.commonNameZh}（已下架）` }, ...published];
+}
+
 export function CatchEditPage() {
   const { id: idParam } = useParams();
   const id = parseCatchId(idParam);
@@ -61,8 +65,8 @@ export function CatchEditPage() {
     retry: (failureCount, error) => !isConfirmedUnauthorized(error) && failureCount < 2,
   });
   const catalogQuery = useQuery({
-    queryKey: fishListQueryKey(catalogFilters),
-    queryFn: () => fetchFishPage(catalogFilters),
+    queryKey: fishOptionsQueryKey,
+    queryFn: () => fetchAllPublishedFishOptions(),
     enabled: id !== undefined && !sessionExpired,
     retry: (failureCount, error) => !isConfirmedUnauthorized(error) && failureCount < 2,
   });
@@ -150,10 +154,7 @@ export function CatchEditPage() {
         </div>
       </header>
       <CatchRecordForm
-        fishOptions={catalogQuery.data.items.map((fish) => ({
-          slug: fish.slug,
-          commonNameZh: fish.commonNameZh,
-        }))}
+        fishOptions={fishOptionsForEdit(catalogQuery.data, detailQuery.data)}
         initialValues={formValues(detailQuery.data)}
         submitLabel="保存修改"
         onSubmit={async (input) => {

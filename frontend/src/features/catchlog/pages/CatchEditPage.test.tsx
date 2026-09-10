@@ -19,12 +19,12 @@ import { CatchEditPage } from './CatchEditPage';
 
 const {
   fetchCatchRecordMock,
-  fetchFishPageMock,
+  fetchFishOptionsMock,
   fetchCurrentUserMock,
   updateCatchRecordMock,
 } = vi.hoisted(() => ({
   fetchCatchRecordMock: vi.fn(),
-  fetchFishPageMock: vi.fn(),
+  fetchFishOptionsMock: vi.fn(),
   fetchCurrentUserMock: vi.fn(),
   updateCatchRecordMock: vi.fn(),
 }));
@@ -40,7 +40,7 @@ vi.mock('../api/catchRecordsApi', async (importOriginal) => {
 
 vi.mock('../../catalog/api/catalogApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../catalog/api/catalogApi')>();
-  return { ...actual, fetchFishPage: fetchFishPageMock };
+  return { ...actual, fetchAllPublishedFishOptions: fetchFishOptionsMock };
 });
 
 vi.mock('../../auth/api/currentUser', async (importOriginal) => {
@@ -193,20 +193,19 @@ function notFoundError() {
 
 beforeEach(() => {
   fetchCatchRecordMock.mockReset();
-  fetchFishPageMock.mockReset();
+  fetchFishOptionsMock.mockReset();
   fetchCurrentUserMock.mockReset();
   updateCatchRecordMock.mockReset();
   fetchCatchRecordMock.mockResolvedValue(savedCatch);
   fetchCurrentUserMock.mockResolvedValue({
     id: 1, email: 'angler@example.com', nickname: 'River', role: 'USER',
   });
-  fetchFishPageMock.mockResolvedValue({
-    items: [{
+  fetchFishOptionsMock.mockResolvedValue([
+    {
       slug: 'channa-argus', commonNameZh: '乌鳢', scientificName: 'Channa argus',
       familyNameZh: '鳢科', aliases: [], habitats: [], imagePath: '/fish.jpg', imageAltText: '乌鳢',
-    }],
-    page: 0, size: 12, totalItems: 1, totalPages: 1,
-  });
+    },
+  ]);
 });
 
 test('loads saved values into the reusable form', async () => {
@@ -220,6 +219,18 @@ test('loads saved values into the reusable form', async () => {
   expect(screen.getByLabelText('重量（g）')).toHaveValue(1350);
   expect(screen.getByLabelText('钓法')).toHaveValue('路亚');
   expect(screen.getByLabelText('备注')).toHaveValue('傍晚近岸中鱼');
+});
+
+test('retains a current unpublished fish as an explicitly marked selected option', async () => {
+  fetchFishOptionsMock.mockResolvedValue([
+    { slug: 'other-fish', commonNameZh: '其他已发布鱼种', scientificName: 'Other fish', familyNameZh: '测试科', aliases: [], habitats: [], imagePath: '/other.jpg', imageAltText: '其他已发布鱼种' },
+  ]);
+  renderCatchEdit();
+
+  const fishSelect = await screen.findByLabelText('鱼种');
+  expect(fishSelect).toHaveValue('channa-argus');
+  expect(screen.getByRole('option', { name: '乌鳢（已下架）' })).toHaveValue('channa-argus');
+  expect(screen.getByRole('option', { name: '其他已发布鱼种' })).toBeInTheDocument();
 });
 
 test('shows loading while record or catalog data is pending', () => {

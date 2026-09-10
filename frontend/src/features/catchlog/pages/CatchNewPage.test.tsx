@@ -13,9 +13,9 @@ import { FAVORITES_QUERY_KEY } from '../../favorites/api/favoritesApi';
 import type { CatchRecordDetail, CatchRecordPage } from '../model/types';
 import { CatchNewPage } from './CatchNewPage';
 
-const { createCatchRecordMock, fetchFishPageMock, putCatchPhotoMock } = vi.hoisted(() => ({
+const { createCatchRecordMock, fetchFishOptionsMock, putCatchPhotoMock } = vi.hoisted(() => ({
   createCatchRecordMock: vi.fn(),
-  fetchFishPageMock: vi.fn(),
+  fetchFishOptionsMock: vi.fn(),
   putCatchPhotoMock: vi.fn(),
 }));
 
@@ -26,7 +26,7 @@ vi.mock('../api/catchRecordsApi', async (importOriginal) => {
 
 vi.mock('../../catalog/api/catalogApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../catalog/api/catalogApi')>();
-  return { ...actual, fetchFishPage: fetchFishPageMock };
+  return { ...actual, fetchAllPublishedFishOptions: fetchFishOptionsMock };
 });
 
 vi.mock('../api/catchPhotoApi', async (importOriginal) => {
@@ -143,33 +143,41 @@ async function completeRequiredFields(user: ReturnType<typeof userEvent.setup>) 
 
 beforeEach(() => {
   createCatchRecordMock.mockReset();
-  fetchFishPageMock.mockReset();
+  fetchFishOptionsMock.mockReset();
   putCatchPhotoMock.mockReset();
-  fetchFishPageMock.mockResolvedValue({
-    items: [{
+  fetchFishOptionsMock.mockResolvedValue([
+    {
       slug: 'channa-argus', commonNameZh: '乌鳢', scientificName: 'Channa argus',
       familyNameZh: '鳢科', aliases: [], habitats: [], imagePath: '/fish.jpg', imageAltText: '乌鳢',
-    }],
-    page: 0, size: 12, totalItems: 1, totalPages: 1,
-  });
+    },
+  ]);
 });
 
 test('loads the full catalog as select-only fish options', async () => {
   renderNewPage();
 
   expect(await screen.findByRole('option', { name: '乌鳢' })).toHaveValue('channa-argus');
-  expect(fetchFishPageMock).toHaveBeenCalledWith({ q: '', family: '', habitat: '', page: 0 });
+  expect(fetchFishOptionsMock).toHaveBeenCalledWith();
   expect(screen.getByLabelText('鱼种')).toHaveProperty('tagName', 'SELECT');
 });
 
+test('offers a published fish returned from a later catalog page', async () => {
+  fetchFishOptionsMock.mockResolvedValue([
+    { slug: 'channa-argus', commonNameZh: '乌鳢', scientificName: 'Channa argus', familyNameZh: '鳢科', aliases: [], habitats: [], imagePath: '/fish.jpg', imageAltText: '乌鳢' },
+    { slug: 'page-two-fish', commonNameZh: '第二页鱼种', scientificName: 'Later fish', familyNameZh: '测试科', aliases: [], habitats: [], imagePath: '/fish-two.jpg', imageAltText: '第二页鱼种' },
+  ]);
+  const { user } = renderNewPage();
+
+  await user.selectOptions(await screen.findByLabelText('鱼种'), 'page-two-fish');
+  expect(screen.getByLabelText('鱼种')).toHaveValue('page-two-fish');
+});
+
 test('shows a safe catalog loading error and retries without rendering a free-text fish field', async () => {
-  fetchFishPageMock
+  fetchFishOptionsMock
     .mockRejectedValueOnce(new Error('catalog connection refused at db.internal'))
     .mockRejectedValueOnce(new Error('catalog connection refused at db.internal'))
     .mockRejectedValueOnce(new Error('catalog connection refused at db.internal'))
-    .mockResolvedValueOnce({
-      items: [], page: 0, size: 12, totalItems: 0, totalPages: 0,
-    });
+    .mockResolvedValueOnce([]);
   const { user } = renderNewPage();
 
   const status = await screen.findByText('加载鱼种失败，请稍后重试');
@@ -178,7 +186,7 @@ test('shows a safe catalog loading error and retries without rendering a free-te
   expect(screen.queryByLabelText('鱼种')).not.toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: '重试' }));
 
-  await waitFor(() => expect(fetchFishPageMock).toHaveBeenCalledTimes(4));
+  await waitFor(() => expect(fetchFishOptionsMock).toHaveBeenCalledTimes(4));
 });
 
 test('successful creation seeds detail cache, invalidates catches, and navigates to the record', async () => {
@@ -272,7 +280,7 @@ test('confirmed save 401 clears private catch caches before routing to login', a
 });
 
 test('confirmed catalog 401 clears private caches before rendering the login redirect', async () => {
-  fetchFishPageMock.mockRejectedValue(new ApiError(401, {
+  fetchFishOptionsMock.mockRejectedValue(new ApiError(401, {
     code: 'AUTHENTICATION_REQUIRED', message: '请先登录', fieldErrors: [], requestId: 'test-request',
   }));
   const { queryClient } = renderNewPage({ cachedCatches: true });
