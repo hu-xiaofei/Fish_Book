@@ -35,6 +35,13 @@ const authenticatedUser: User = {
   role: 'USER',
 };
 
+const administrator: User = {
+  id: 2,
+  email: 'admin@example.com',
+  nickname: '管理员',
+  role: 'ADMIN',
+};
+
 function seedUserFavorites(queryClient: QueryClient) {
   queryClient.setQueryData([...FAVORITES_QUERY_KEY, 'page', 0], {
     items: [{ fishSlug: 'user-a-fish' }],
@@ -57,14 +64,14 @@ function seedUserCatches(queryClient: QueryClient) {
   });
 }
 
-function renderSessionNav() {
+function renderSessionNav(currentUser: User = authenticatedUser) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
       mutations: { retry: false },
     },
   });
-  queryClient.setQueryData(CURRENT_USER_QUERY_KEY, authenticatedUser);
+  queryClient.setQueryData(CURRENT_USER_QUERY_KEY, currentUser);
 
   return {
     queryClient,
@@ -92,8 +99,19 @@ beforeEach(() => {
 test('authenticated navigation includes personal favorites and catch records', () => {
   renderSessionNav();
 
+  expect(screen.getByRole('link', { name: '个人资料' })).toHaveAttribute('href', '/profile');
   expect(screen.getByRole('link', { name: '我的收藏' })).toHaveAttribute('href', '/favorites');
   expect(screen.getByRole('link', { name: '钓获记录' })).toHaveAttribute('href', '/catches');
+  expect(screen.queryByRole('link', { name: '图鉴管理' })).not.toBeInTheDocument();
+});
+
+test('administrator navigation includes management and existing user links', () => {
+  renderSessionNav(administrator);
+
+  expect(screen.getByRole('link', { name: '个人资料' })).toHaveAttribute('href', '/profile');
+  expect(screen.getByRole('link', { name: '我的收藏' })).toHaveAttribute('href', '/favorites');
+  expect(screen.getByRole('link', { name: '钓获记录' })).toHaveAttribute('href', '/catches');
+  expect(screen.getByRole('link', { name: '图鉴管理' })).toHaveAttribute('href', '/admin/fishes');
 });
 
 test('successful logout removes all private record queries before current-user data', async () => {

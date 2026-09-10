@@ -35,6 +35,7 @@ export function SessionNav() {
       <Link to="/profile">个人资料</Link>{' '}
       <Link to="/favorites">我的收藏</Link>{' '}
       <Link to="/catches">钓获记录</Link>{' '}
+      {currentUser.data.role === 'ADMIN' ? <><Link to="/admin/fishes">图鉴管理</Link>{' '}</> : null}
       <button
         type="button"
         disabled={logoutMutation.isPending}
