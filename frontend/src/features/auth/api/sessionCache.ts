@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import { ADMIN_FISHES_QUERY_KEY } from '../../administration/api/adminFishApi';
 import { CATCHES_QUERY_KEY } from '../../catchlog/api/catchRecordsApi';
 import { FAVORITES_QUERY_KEY } from '../../favorites/api/favoritesApi';
 import { CURRENT_USER_QUERY_KEY, isConfirmedUnauthorized } from './currentUser';
@@ -15,6 +16,7 @@ export function isCurrentSessionGeneration(generation: number): boolean {
 
 export function clearSessionScopedQueries(queryClient: QueryClient) {
   sessionGeneration += 1;
+  queryClient.removeQueries({ queryKey: ADMIN_FISHES_QUERY_KEY });
   queryClient.removeQueries({ queryKey: CATCHES_QUERY_KEY });
   queryClient.removeQueries({ queryKey: FAVORITES_QUERY_KEY });
   queryClient.removeQueries({

@@ -1,5 +1,6 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { ProtectedRoute } from '../features/auth/components/ProtectedRoute';
+import { AdminRoute } from '../features/auth/components/AdminRoute';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { ProfilePage } from '../features/auth/pages/ProfilePage';
 import { RegisterPage } from '../features/auth/pages/RegisterPage';
@@ -9,6 +10,7 @@ import { CatchListPage } from '../features/catchlog/pages/CatchListPage';
 import { CatchNewPage } from '../features/catchlog/pages/CatchNewPage';
 import { CatchDetailPage } from '../features/catchlog/pages/CatchDetailPage';
 import { CatchEditPage } from '../features/catchlog/pages/CatchEditPage';
+import { AdminFishListPage } from '../features/administration/pages/AdminFishListPage';
 import { App } from './App';
 
 export const router = createBrowserRouter([
@@ -66,6 +68,14 @@ export const router = createBrowserRouter([
       <ProtectedRoute>
         <CatchEditPage />
       </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/admin/fishes',
+    element: (
+      <AdminRoute>
+        <AdminFishListPage />
+      </AdminRoute>
     ),
   },
   {
