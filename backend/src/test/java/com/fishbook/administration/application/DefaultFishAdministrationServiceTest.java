@@ -46,6 +46,18 @@ class DefaultFishAdministrationServiceTest {
     }
 
     @Test
+    void rejectsOversizedKeywordAndMalformedManagementFilters() {
+        assertThatThrownBy(() -> AdminFishQuery.from("鱼".repeat(101), null, null, null))
+                .isInstanceOf(InvalidAdminFishQueryException.class);
+        assertThatThrownBy(() -> AdminFishQuery.from(null, "unknown", null, null))
+                .isInstanceOf(InvalidAdminFishQueryException.class);
+        assertThatThrownBy(() -> AdminFishQuery.from(null, null, "-1", null))
+                .isInstanceOf(InvalidAdminFishQueryException.class);
+        assertThatThrownBy(() -> AdminFishQuery.from(null, null, "not-a-number", null))
+                .isInstanceOf(InvalidAdminFishQueryException.class);
+    }
+
+    @Test
     void searchesManagedFishWithFixedPageSizeAndStatusFilter() {
         repository.save(FishSpecies.createDraft("draft-fish", content().toDomain(), NOW));
         repository.save(FishSpecies.createDraft("published-fish", publishedContent().toDomain(), NOW).publish(NOW));

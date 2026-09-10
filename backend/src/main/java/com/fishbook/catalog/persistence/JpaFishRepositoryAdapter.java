@@ -131,6 +131,8 @@ public class JpaFishRepositoryAdapter implements FishRepository, FishManagementR
         } else {
             entity = repository.findWithDetailsById(fish.id())
                     .orElseThrow(() -> new IllegalArgumentException("fish must exist"));
+            entity.clearDetails();
+            repository.flush();
             entity.apply(fish);
         }
         return toDomain(repository.saveAndFlush(entity));

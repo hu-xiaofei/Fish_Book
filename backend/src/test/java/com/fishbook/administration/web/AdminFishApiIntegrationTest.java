@@ -103,6 +103,40 @@ class AdminFishApiIntegrationTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
+    void mapsPatternSizeNotEmptyAndPositiveRequestViolations() throws Exception {
+        mvc.perform(post("/api/v1/admin/fishes")
+                        .with(csrf()).contentType(APPLICATION_JSON)
+                        .content(validCreateJson("pattern-fish")
+                                .replace("\"slug\":\"pattern-fish\"", "\"slug\":\"Bad_slug\"")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("slug"));
+        mvc.perform(post("/api/v1/admin/fishes")
+                        .with(csrf()).contentType(APPLICATION_JSON)
+                        .content(validCreateJson("size-fish")
+                                .replace("\"scientificName\":\"Administratus size-fish\"",
+                                        "\"scientificName\":\"" + "x".repeat(161) + "\"")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("scientificName"));
+        mvc.perform(post("/api/v1/admin/fishes")
+                        .with(csrf()).contentType(APPLICATION_JSON)
+                        .content(validCreateJson("empty-aliases-fish")
+                                .replace("\"aliases\":[\"管理别名\"]", "\"aliases\":[]")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("aliases"));
+        mvc.perform(post("/api/v1/admin/fishes")
+                        .with(csrf()).contentType(APPLICATION_JSON)
+                        .content(validCreateJson("zero-order-fish")
+                                .replace("\"displayOrder\":1", "\"displayOrder\":0")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("displayOrder"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
     void mapsCatalogConflictsMissingFishAndIllegalTransitions() throws Exception {
         create("conflict-base-fish");
         mvc.perform(post("/api/v1/admin/fishes").with(csrf()).contentType(APPLICATION_JSON)

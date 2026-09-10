@@ -114,6 +114,17 @@ class JpaFishRepositoryAdapterTest {
     }
 
     @Test
+    void replacesAliasesThatAreEquivalentUnderMySqlCollation() {
+        FishSpecies saved = adapter.save(FishSpecies.createDraft(
+                "collation-fish", content(List.of("Black Fish"), EnumSet.of(HabitatType.RIVER)), NOW));
+
+        FishSpecies edited = adapter.save(saved.edit(
+                content(List.of("black fish"), EnumSet.of(HabitatType.RIVER)), LATER));
+
+        assertThat(edited.aliases()).containsExactly("black fish");
+    }
+
+    @Test
     void searchesByCommonName() {
         assertThat(adapter.searchPublished(new FishSearchCriteria("鲤", null, null, 0, 12)).items())
                 .extracting(FishSpecies::slug)
