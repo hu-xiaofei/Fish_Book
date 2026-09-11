@@ -122,6 +122,12 @@ class FishSpeciesTest {
     }
 
     @Test
+    void rejectsAliasesEquivalentUnderTheStorageCollation() {
+        assertThatThrownBy(() -> contentWithAliases(List.of("Black Fish", "black fish")))
+                .isInstanceOf(InvalidFishSpeciesException.class);
+    }
+
+    @Test
     void enforcesSchemaSizedNamesAndContentFieldsByCodePointCount() {
         assertThat(content(
                 "鱼".repeat(100), "鱼".repeat(160), List.of("别名"), Set.of(HabitatType.RIVER),

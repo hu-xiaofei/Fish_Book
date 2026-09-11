@@ -30,8 +30,8 @@ public class JpaFavoriteRepositoryAdapter implements FavoriteRepository {
 
     @Override
     @Transactional
-    public void remove(long userId, long fishId) {
-        repository.deleteIfPresent(userId, fishId);
+    public void removeByUserIdAndFishSlug(long userId, String fishSlug) {
+        repository.deleteByUserIdAndFishSlug(userId, fishSlug);
     }
 
     @Override

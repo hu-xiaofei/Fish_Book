@@ -10,6 +10,7 @@ import type { AdminFishCreateInput } from '../model/types';
 export type AdminFishFormProps = {
   initialValues?: AdminFishFormValues;
   slugReadOnly?: boolean;
+  submitDisabled?: boolean;
   submitLabel: string;
   onSubmit: (input: AdminFishCreateInput) => Promise<void>;
 };
@@ -45,6 +46,7 @@ function fieldProps(id: string, error?: string) {
 export function AdminFishForm({
   initialValues,
   slugReadOnly = false,
+  submitDisabled = false,
   submitLabel,
   onSubmit,
 }: AdminFishFormProps) {
@@ -171,7 +173,7 @@ export function AdminFishForm({
       </fieldset>
 
       {serverError ? <p role="status" aria-live="polite">{serverError}</p> : null}
-      <button type="submit" disabled={isSubmitting}>{isSubmitting ? '保存中…' : submitLabel}</button>
+      <button type="submit" disabled={isSubmitting || submitDisabled}>{isSubmitting ? '保存中…' : submitLabel}</button>
     </form>
   );
 }

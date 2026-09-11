@@ -83,12 +83,7 @@ public class GlobalExceptionHandler {
     ResponseEntity<ApiErrorResponse> handleInvalidFishSpecies(
             InvalidFishSpeciesException exception,
             HttpServletRequest request) {
-        return error(
-                HttpStatus.BAD_REQUEST,
-                exception.code(),
-                "Fish content is invalid",
-                List.of(),
-                request);
+        return invalidFishContent(exception.field(), request);
     }
 
     @ExceptionHandler(InvalidFavoriteQueryException.class)
@@ -202,6 +197,9 @@ public class GlobalExceptionHandler {
                     "An account with that email already exists",
                     List.of(),
                     request);
+        }
+        if (causedByAliasUniqueConstraint(exception)) {
+            return invalidFishContent("aliases", request);
         }
         if (causedByCatalogUniqueConstraint(exception)) {
             return error(
@@ -354,6 +352,24 @@ public class GlobalExceptionHandler {
                 "uk_fish_species_slug",
                 "uk_fish_species_common_name_zh",
                 "uk_fish_species_scientific_name");
+    }
+
+    private static boolean causedByAliasUniqueConstraint(Throwable exception) {
+        return causedByConstraint(exception, "uk_fish_aliases_species_alias");
+    }
+
+    private static ResponseEntity<ApiErrorResponse> invalidFishContent(
+            String field,
+            HttpServletRequest request) {
+        List<FieldErrorItem> fieldErrors = "aliases".equals(field)
+                ? List.of(new FieldErrorItem("aliases", "Aliases must be unique"))
+                : List.of();
+        return error(
+                HttpStatus.BAD_REQUEST,
+                "VALIDATION_FAILED",
+                "Fish content is invalid",
+                fieldErrors,
+                request);
     }
 
     private static boolean causedByConstraint(Throwable exception, String... constraintNames) {

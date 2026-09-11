@@ -37,7 +37,7 @@ export function AdminFishEditPage() {
   const queryClient = useQueryClient();
   const { sessionExpired, expireIfUnauthorized } = useSessionExpiry();
   const [pageError, setPageError] = useState<string>();
-  const actionInFlight = useRef(false);
+  const operationInFlight = useRef(false);
   const detailQuery = useQuery({
     queryKey: adminFishDetailQueryKey(id ?? 0),
     queryFn: () => fetchAdminFish(id as number),
@@ -89,21 +89,27 @@ export function AdminFishEditPage() {
   useEffect(() => { expireIfUnauthorized(detailQuery.error); }, [detailQuery.error, expireIfUnauthorized]);
 
   const saveContent = async (input: AdminFishCreateInput) => {
+    if (operationInFlight.current) return;
+    operationInFlight.current = true;
     const { slug, ...updateInput } = input;
     void slug;
-    await updateMutation.mutateAsync(updateInput);
+    try {
+      await updateMutation.mutateAsync(updateInput);
+    } finally {
+      operationInFlight.current = false;
+    }
   };
   const performAction = async (action: 'publish' | 'unpublish') => {
-    if (actionInFlight.current) return;
+    if (operationInFlight.current) return;
     if (action === 'unpublish' && !window.confirm('下架后公众将无法看到这条鱼类资料，确认下架吗？')) return;
-    actionInFlight.current = true;
+    operationInFlight.current = true;
     setPageError(undefined);
     try {
       await actionMutation.mutateAsync(action);
     } catch {
       // The mutation's onError callback renders only safe, user-facing state.
     } finally {
-      actionInFlight.current = false;
+      operationInFlight.current = false;
     }
   };
 
@@ -127,9 +133,9 @@ export function AdminFishEditPage() {
       </header>
       {location.state && typeof location.state === 'object' && 'created' in location.state ? <p role="status">草稿已保存</p> : null}
       {pageError ? <p role="status">{pageError}</p> : null}
-      <div className={styles.actionBar}><button type="button" disabled={actionMutation.isPending} onClick={() => { void performAction(action); }}>{actionMutation.isPending ? '处理中…' : actionLabel}</button></div>
+      <div className={styles.actionBar}><button type="button" disabled={updateMutation.isPending || actionMutation.isPending} onClick={() => { void performAction(action); }}>{actionMutation.isPending ? '处理中…' : actionLabel}</button></div>
       <section className={styles.formPanel}>
-        <AdminFishForm initialValues={adminFishDetailToFormValues(fish)} slugReadOnly submitLabel="保存修改" onSubmit={saveContent} />
+        <AdminFishForm initialValues={adminFishDetailToFormValues(fish)} slugReadOnly submitDisabled={actionMutation.isPending} submitLabel="保存修改" onSubmit={saveContent} />
       </section>
     </main>
   );

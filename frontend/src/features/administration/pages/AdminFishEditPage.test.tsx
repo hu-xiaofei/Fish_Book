@@ -130,6 +130,42 @@ test('prevents duplicate publication actions while a request is pending', async 
   await waitFor(() => expect(button).not.toBeDisabled());
 });
 
+test('a pending content save blocks publication actions without duplicate requests', async () => {
+  let resolveUpdate!: (detail: AdminFishDetail) => void;
+  updateAdminFishMock.mockReturnValue(new Promise<AdminFishDetail>((done) => { resolveUpdate = done; }));
+  const { user } = renderEdit();
+  const saveButton = await screen.findByRole('button', { name: '保存修改' });
+  const publishButton = screen.getByRole('button', { name: '发布' });
+
+  await user.click(saveButton);
+  await waitFor(() => expect(updateAdminFishMock).toHaveBeenCalledTimes(1));
+  expect(publishButton).toBeDisabled();
+  await user.click(publishButton);
+
+  expect(updateAdminFishMock).toHaveBeenCalledTimes(1);
+  expect(publishAdminFishMock).not.toHaveBeenCalled();
+  resolveUpdate(draftDetail);
+  await waitFor(() => expect(publishButton).not.toBeDisabled());
+});
+
+test('a pending publication action blocks content saves without duplicate requests', async () => {
+  let resolvePublish!: (detail: AdminFishDetail) => void;
+  publishAdminFishMock.mockReturnValue(new Promise<AdminFishDetail>((done) => { resolvePublish = done; }));
+  const { user } = renderEdit();
+  const publishButton = await screen.findByRole('button', { name: '发布' });
+  const saveButton = screen.getByRole('button', { name: '保存修改' });
+
+  await user.click(publishButton);
+  await waitFor(() => expect(publishAdminFishMock).toHaveBeenCalledTimes(1));
+  expect(saveButton).toBeDisabled();
+  await user.click(saveButton);
+
+  expect(publishAdminFishMock).toHaveBeenCalledTimes(1);
+  expect(updateAdminFishMock).not.toHaveBeenCalled();
+  resolvePublish(publishedDetail);
+  await waitFor(() => expect(saveButton).not.toBeDisabled());
+});
+
 test('renders a safe publication transition error and expires a confirmed unauthorized session', async () => {
   publishAdminFishMock.mockRejectedValueOnce(new ApiError(409, { code: 'INVALID_PUBLICATION_TRANSITION', message: 'state changed', fieldErrors: [], requestId: 'request' }));
   const { user } = renderEdit();

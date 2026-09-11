@@ -53,8 +53,7 @@ public class DefaultFavoriteApplicationService implements FavoriteApplicationSer
     public void remove(String authenticatedEmail, String fishSlug) {
         validateSlug(fishSlug);
         UserView user = currentUser(authenticatedEmail);
-        FishReferenceView fish = fishCatalogQueryService.getReferenceBySlugIncludingUnpublished(fishSlug);
-        favoriteRepository.remove(user.id(), fish.id());
+        favoriteRepository.removeByUserIdAndFishSlug(user.id(), fishSlug);
     }
 
     @Override

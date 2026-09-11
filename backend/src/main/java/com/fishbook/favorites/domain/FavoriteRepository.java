@@ -6,7 +6,7 @@ import java.util.Set;
 public interface FavoriteRepository {
     void add(long userId, long fishId, Instant now);
 
-    void remove(long userId, long fishId);
+    void removeByUserIdAndFishSlug(long userId, String fishSlug);
 
     FavoritePage findByUserId(long userId, int page, int size);
 

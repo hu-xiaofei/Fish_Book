@@ -1,8 +1,11 @@
 package com.fishbook.catalog.domain;
 
+import java.text.Normalizer;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 public record FishSpeciesContent(
@@ -61,13 +64,32 @@ public record FishSpeciesContent(
             throw new InvalidFishSpeciesException("aliases must not be null");
         }
         LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        Set<String> collationKeys = new HashSet<>();
         for (String value : values) {
             String alias = required(value, 100, "alias");
-            if (!normalized.add(alias)) {
-                throw new InvalidFishSpeciesException("aliases must be unique after normalization");
+            if (!collationKeys.add(storageCollationKey(alias))) {
+                throw new InvalidFishSpeciesException(
+                        "aliases", "aliases must be unique under storage collation");
             }
+            normalized.add(alias);
         }
         return List.copyOf(normalized);
+    }
+
+    private static String storageCollationKey(String value) {
+        String decomposed = Normalizer.normalize(value, Normalizer.Form.NFKD);
+        StringBuilder withoutMarks = new StringBuilder(decomposed.length());
+        decomposed.codePoints()
+                .filter(codePoint -> !isCombiningMark(codePoint))
+                .forEach(withoutMarks::appendCodePoint);
+        return withoutMarks.toString().toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean isCombiningMark(int codePoint) {
+        int type = Character.getType(codePoint);
+        return type == Character.NON_SPACING_MARK
+                || type == Character.COMBINING_SPACING_MARK
+                || type == Character.ENCLOSING_MARK;
     }
 
     private static Set<HabitatType> immutableHabitats(Set<HabitatType> values) {

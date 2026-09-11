@@ -103,6 +103,38 @@ class AdminFishApiIntegrationTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
+    void rejectsCollationEquivalentAliasesOnCreateWithASafeFieldError() throws Exception {
+        mvc.perform(post("/api/v1/admin/fishes")
+                        .with(csrf()).contentType(APPLICATION_JSON)
+                        .content(validCreateJson("collation-create-fish")
+                                .replace("\"aliases\":[\"管理别名\"]",
+                                        "\"aliases\":[\"Black Fish\",\"black fish\"]")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value("Fish content is invalid"))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("aliases"))
+                .andExpect(jsonPath("$.fieldErrors[0].message").value("Aliases must be unique"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void rejectsCollationEquivalentAliasesOnUpdateWithASafeFieldError() throws Exception {
+        long id = create("collation-update-fish");
+
+        mvc.perform(put("/api/v1/admin/fishes/{id}", id)
+                        .with(csrf()).contentType(APPLICATION_JSON)
+                        .content(validUpdateJson("Collation update fish")
+                                .replace("\"aliases\":[\"编辑别名\"]",
+                                        "\"aliases\":[\"Straße\",\"strasse\"]")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value("Fish content is invalid"))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("aliases"))
+                .andExpect(jsonPath("$.fieldErrors[0].message").value("Aliases must be unique"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
     void mapsPatternSizeNotEmptyAndPositiveRequestViolations() throws Exception {
         mvc.perform(post("/api/v1/admin/fishes")
                         .with(csrf()).contentType(APPLICATION_JSON)

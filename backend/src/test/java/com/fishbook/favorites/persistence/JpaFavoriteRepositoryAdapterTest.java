@@ -63,8 +63,8 @@ class JpaFavoriteRepositoryAdapterTest {
     void removingTheSameFishTwiceLeavesNoFavorite() {
         adapter.add(USER_ID, 1L, Instant.parse("2026-08-14T00:00:00Z"));
 
-        adapter.remove(USER_ID, 1L);
-        adapter.remove(USER_ID, 1L);
+        adapter.removeByUserIdAndFishSlug(USER_ID, "carassius-auratus");
+        adapter.removeByUserIdAndFishSlug(USER_ID, "carassius-auratus");
 
         assertThat(adapter.findByUserId(USER_ID, 0, 10).items()).isEmpty();
     }
@@ -79,7 +79,7 @@ class JpaFavoriteRepositoryAdapterTest {
             List<Future<Object>> removals = IntStream.range(0, 8)
                     .mapToObj(ignored -> executor.submit(() -> {
                         readyToRemove.await(10, TimeUnit.SECONDS);
-                        adapter.remove(USER_ID, 1L);
+                        adapter.removeByUserIdAndFishSlug(USER_ID, "carassius-auratus");
                         return null;
                     }))
                     .toList();

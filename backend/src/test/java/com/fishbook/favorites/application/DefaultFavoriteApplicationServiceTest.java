@@ -25,6 +25,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DefaultFavoriteApplicationServiceTest {
@@ -57,17 +58,25 @@ class DefaultFavoriteApplicationServiceTest {
         service.remove("reader@example.com", "cyprinus-carpio");
 
         assertThat(favorites.removedUserId).isEqualTo(41L);
-        assertThat(favorites.removedFishId).isEqualTo(2L);
+        assertThat(favorites.removedFishSlug).isEqualTo("cyprinus-carpio");
         assertThat(profiles.requestedEmail).isEqualTo("reader@example.com");
     }
 
     @Test
-    void addUsesPublishedLookupWhileRemoveUsesHistoricalReferenceLookup() {
+    void addUsesPublishedLookupWhileRemoveDoesNotUseTheCatalog() {
         service.add("reader@example.com", "channa-argus");
         service.remove("reader@example.com", "cyprinus-carpio");
 
         assertThat(catalog.publishedReferenceSlugs).containsExactly("channa-argus");
-        assertThat(catalog.internalReferenceSlugs).containsExactly("cyprinus-carpio");
+        assertThat(catalog.internalReferenceSlugs).isEmpty();
+    }
+
+    @Test
+    void removalDoesNotResolveFishOutsideTheCurrentUsersFavorites() {
+        assertThatCode(() -> service.remove("reader@example.com", "missing-fish"))
+                .doesNotThrowAnyException();
+
+        assertThat(catalog.internalReferenceSlugs).isEmpty();
     }
 
     @Test
@@ -226,7 +235,7 @@ class DefaultFavoriteApplicationServiceTest {
         private long addedFishId;
         private Instant addedAt;
         private long removedUserId;
-        private long removedFishId;
+        private String removedFishSlug;
         private int lastPage;
         private int lastSize;
         private FavoritePage page = new FavoritePage(List.of(), 0, 12, 0, 0);
@@ -240,9 +249,9 @@ class DefaultFavoriteApplicationServiceTest {
         }
 
         @Override
-        public void remove(long userId, long fishId) {
+        public void removeByUserIdAndFishSlug(long userId, String fishSlug) {
             removedUserId = userId;
-            removedFishId = fishId;
+            removedFishSlug = fishSlug;
         }
 
         @Override
