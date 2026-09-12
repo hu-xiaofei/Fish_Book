@@ -34,7 +34,18 @@ public final class OssMediaStore implements MediaStore {
     @Override
     public StoredMedia get(String objectKey) {
         try (var object = client.getObject(bucket, objectKey)) {
-            byte[] bytes = object.getObjectContent().readNBytes(MAX_BYTES + 1);
+            byte[] bytes;
+            boolean consumed = false;
+            try {
+                bytes = object.getObjectContent().readNBytes(MAX_BYTES + 1);
+                consumed = bytes.length <= MAX_BYTES;
+            } finally {
+                // Normal HTTP entity close drains unread bytes to reuse the connection.
+                // Abort incomplete responses first, then let try-with-resources close the stream.
+                if (!consumed) {
+                    object.forcedClose();
+                }
+            }
             String type = object.getObjectMetadata().getContentType();
             if (bytes.length > MAX_BYTES || type == null || type.isBlank()) {
                 throw new MediaStorageUnavailableException();

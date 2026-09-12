@@ -9,14 +9,20 @@ import static org.mockito.Mockito.*;
 import com.aliyun.oss.ClientException;
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSException;
+import com.aliyun.oss.common.comm.ResponseMessage;
 import com.aliyun.oss.model.OSSObject;
 import com.aliyun.oss.model.ObjectMetadata;
 import com.fishbook.media.domain.MediaStorageUnavailableException;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
+import org.apache.http.HttpVersion;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.impl.io.ContentLengthInputStream;
+import org.apache.http.impl.io.HttpTransportMetricsImpl;
+import org.apache.http.impl.io.SessionInputBufferImpl;
+import org.apache.http.message.BasicHttpResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -101,45 +107,55 @@ class OssMediaStoreTest {
     @Test
     void acceptsExactlyTenMiBAndClosesResponseStream() throws Exception {
         byte[] bytes = new byte[10 * 1024 * 1024];
-        var stream = spy(new ByteArrayInputStream(bytes));
-        var object = object(stream, "image/png");
+        var transport = new Transport(bytes.length, false, false);
+        var object = httpObject(transport);
         when(client.getObject("test-bucket", "maximum")).thenReturn(object);
         assertThat(store.get("maximum").content()).isEqualTo(bytes);
         verify(object).close();
-        verify(stream).close();
+        assertThat(transport.readCount).isEqualTo(bytes.length);
+        assertThat(transport.closed).isFalse(); // Fully consumed connections remain reusable.
+        assertThatThrownBy(() -> object.getObjectContent().read()).isInstanceOf(IOException.class);
     }
 
     @Test
     void rejectsOversizeObjectWithoutReadingBeyondLimitAndClosesStream() throws Exception {
-        var readCount = new AtomicInteger();
-        var closeCount = new AtomicInteger();
-        var stream = new InputStream() {
-            @Override
-            public int read() {
-                readCount.incrementAndGet();
-                return 1;
-            }
-
-            @Override
-            public int read(byte[] bytes, int offset, int length) {
-                java.util.Arrays.fill(bytes, offset, offset + length, (byte) 1);
-                readCount.addAndGet(length);
-                return length;
-            }
-
-            @Override
-            public void close() {
-                closeCount.incrementAndGet();
-            }
-        };
-        var object = object(stream, "image/png");
+        var transport = new Transport(20 * 1024 * 1024, false, false);
+        var object = httpObject(transport);
         when(client.getObject("test-bucket", "too-large")).thenReturn(object);
         assertThatThrownBy(() -> store.get("too-large"))
                 .isInstanceOf(MediaStorageUnavailableException.class)
                 .hasMessage("媒体存储暂时不可用");
-        assertThat(readCount.get()).isEqualTo(10 * 1024 * 1024 + 1);
+        // One extra byte is prefetched by the one-byte Apache session buffer.
+        assertThat(transport.readCount).isEqualTo(10 * 1024 * 1024 + 2);
+        assertThat(transport.closed).isTrue();
         verify(object).close();
-        assertThat(closeCount.get()).isEqualTo(1);
+        assertThatThrownBy(() -> object.getObjectContent().read()).isInstanceOf(IOException.class);
+    }
+
+    @Test
+    void readFailureAbortsBeforeDrainingTheRemainingHttpEntity() throws Exception {
+        var transport = new Transport(20 * 1024 * 1024, true, false);
+        var object = httpObject(transport);
+        when(client.getObject("test-bucket", "read-failed")).thenReturn(object);
+        assertThatThrownBy(() -> store.get("read-failed"))
+                .isInstanceOf(MediaStorageUnavailableException.class)
+                .hasMessage("媒体存储暂时不可用");
+        assertThat(transport.readCount).isZero();
+        assertThat(transport.closed).isTrue();
+        assertThatThrownBy(() -> object.getObjectContent().read()).isInstanceOf(IOException.class);
+    }
+
+    @Test
+    void abortFailureStillClosesEntityAndDoesNotExposeCleanupDetails() throws Exception {
+        var transport = new Transport(20 * 1024 * 1024, false, true);
+        var object = httpObject(transport);
+        when(client.getObject("test-bucket", "abort-failed")).thenReturn(object);
+        assertThatThrownBy(() -> store.get("abort-failed"))
+                .isInstanceOf(MediaStorageUnavailableException.class)
+                .hasMessage("媒体存储暂时不可用");
+        assertThat(transport.readCount).isEqualTo(10 * 1024 * 1024 + 2);
+        assertThat(transport.closed).isTrue();
+        assertThatThrownBy(() -> object.getObjectContent().read()).isInstanceOf(IOException.class);
     }
 
     @Test
@@ -197,6 +213,70 @@ class OssMediaStoreTest {
         metadata.setContentType(contentType);
         object.setObjectMetadata(metadata);
         object.setObjectContent(stream);
+        object.setResponse(new ResponseMessage(null));
         return object;
+    }
+
+    private OSSObject httpObject(Transport transport) {
+        // Keep the real HTTP entity's draining close; fake only the socket boundary.
+        var buffer = new SessionInputBufferImpl(new HttpTransportMetricsImpl(), 1);
+        buffer.bind(transport);
+        var object = object(new ContentLengthInputStream(buffer, transport.length), "image/png");
+        object.getResponse().setHttpResponse(new TransportResponse(transport));
+        return object;
+    }
+
+    private static final class TransportResponse extends BasicHttpResponse implements CloseableHttpResponse {
+        private final Transport transport;
+
+        TransportResponse(Transport transport) {
+            super(HttpVersion.HTTP_1_1, 200, "OK");
+            this.transport = transport;
+        }
+
+        @Override
+        public void close() throws IOException {
+            transport.close();
+        }
+    }
+
+    private static final class Transport extends InputStream {
+        private final int length;
+        private final boolean failClose;
+        private boolean failRead;
+        private int readCount;
+        private boolean closed;
+
+        Transport(int length, boolean failRead, boolean failClose) {
+            this.length = length;
+            this.failRead = failRead;
+            this.failClose = failClose;
+        }
+
+        @Override
+        public int read() throws IOException {
+            byte[] one = new byte[1];
+            return read(one, 0, 1) == -1 ? -1 : one[0];
+        }
+
+        @Override
+        public int read(byte[] bytes, int offset, int count) throws IOException {
+            if (closed) throw new IOException("FAKE-closed-transport");
+            if (failRead) {
+                failRead = false; // A later draining close would resume downloading.
+                throw new IOException("FAKE-read-secret");
+            }
+            if (readCount == length) return -1;
+            int received = Math.min(count, length - readCount);
+            java.util.Arrays.fill(bytes, offset, offset + received, (byte) 0);
+            readCount += received;
+            return received;
+        }
+
+        @Override
+        public void close() throws IOException {
+            closed = true;
+            if (failClose) throw new IOException("FAKE-abort-secret");
+        }
     }
 }

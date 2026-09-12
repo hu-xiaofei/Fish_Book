@@ -26,7 +26,7 @@ OSS Endpoint 必须为 HTTPS，客户端启用 V4 签名与 HTTPS 证书验证�
 
 ## 错误与日志隐私
 
-存储异常对外继续返回 `503`、`MEDIA_STORAGE_UNAVAILABLE` 和中文通用提示“媒体存储暂时不可用”，不泄露 Endpoint、对象键或 SDK 原始错误。适配器不将权限错误、超时或其他失败伪装为删除成功；仅对象已不存在视为成功。读取保留 MIME、关闭响应流，并限制读取字节数。
+存储异常对外继续返回 `503`、`MEDIA_STORAGE_UNAVAILABLE` 和中文通用提示“媒体存储暂时不可用”，不泄露 Endpoint、对象键或 SDK 原始错误。适配器不将权限错误、超时或其他失败伪装为删除成功；仅对象已不存在视为成功。读取保留 MIME，最多向应用缓冲区读取 10 MiB + 1 字节以检测超限；恰好 10 MiB 可成功。超限或读取异常时先通过 SDK `forcedClose()` 中止未读完的 HTTP 响应，再正常关闭对象流，避免普通 HTTP 流关闭时继续下载剩余对象。传输层可能预读少量缓冲数据，因此该界限不是整个网络链路的精确字节计量。读取完成时正常关闭并保留连接复用机会；清理失败仍映射中文通用错误。
 
 默认关闭以下 SDK、凭证及传输诊断分类：`com.aliyun.oss`、`com.aliyun.credentials`、`org.apache.http`（包括 `headers` / `wire`）、`okhttp3`、`jdk.httpclient.HttpClient`。实际 SDK 错误日志可能直接输出异常正文、请求头、对象键或凭证，因此默认以隐私优先，牺牲底层排障细节；普通应用通用错误日志仍启用。不得在真实环境开启原始 SDK/传输诊断，也不得记录 exception cause、属性对象、credential、IMDS 响应或 Token。测试只使用人工哨兵文本，没有使用真实秘密。
 
@@ -35,6 +35,8 @@ OSS Endpoint 必须为 HTTPS，客户端启用 V4 签名与 HTTPS 证书验证�
 固定运行时依赖为 `com.aliyun.oss:aliyun-sdk-oss:3.18.5`、`com.aliyun:credentials-java:1.0.6`，`com.aliyun:tea:1.4.2` 由依赖管理固定；没有动态版本。源码仓库名 `aliyun-oss-java-sdk` 不是 Maven artifactId。
 
 本轮 `./mvnw -B dependency:tree -Dscope=runtime` 已成功，实际解析到上述坐标，并包含 HttpClient `4.5.13`、OkHttp JVM `5.3.2`、`javax.xml.bind:jaxb-api:2.3.1` 与 JAXB runtime `4.0.9`。这份实际解析结果用于明确安全评估对象，不代表安全审查通过。
+
+最终复核以 `dependency:list -DincludeScope=runtime` 补齐简略树遗漏的 6 项，完成全部 **148 项**有效编译/运行依赖的 OSV 查询，HTTP 200 且无分页遗漏。7 个不同公告对应 4 个依赖包；另逐项评估 Tomcat 官方页面中 16 个未出现在本次 OSV 结果中的版本相关公告。其触发条件未在当前代码/配置中启用，保留固定依赖并记录部署前重新核对条件；不能据此声称“无漏洞”。详细来源、版本覆盖、适用性、XML 兼容性限制及后续门槛见 [依赖安全评估](oss-dependency-security-assessment.md) 和其中的原始查询快照。
 
 本次使用 Temurin OpenJDK `21.0.12+8-LTS`（Java 21）与 Maven `3.9.16`。下列命令在 `backend/` 执行，Testcontainers 仅启动本地临时 MySQL/MinIO，不连接云数据库、不迁移或删除本地 Compose 数据：
 
@@ -47,6 +49,8 @@ OSS Endpoint 必须为 HTTPS，客户端启用 V4 签名与 HTTPS 证书验证�
 
 本轮本地结果：单个接口脱敏用例 1 个、五类专项回归 24 个、完整后端 342 个，最终各轮均为 0 失败、0 错误、0 跳过并显示 `BUILD SUCCESS`，真实本地 MySQL/MinIO 测试已执行。初次隔离环境下 Mockito 自附加失败（1 个错误），获准在隔离外运行本地验证后消除该环境限制。自动化验证不替代真实云端签名、权限或凭证到期刷新验收。
 
+最终修复波次重新验证：`./mvnw -B -Dtest=OssMediaStoreTest test` 为 **23/0/0/0**；`./mvnw -B test` 为 **344/0/0/0**（测试/失败/错误/跳过，2026-09-12 16:20:49 +08:00）。新增回归使用真实 Apache `ContentLengthInputStream`，修复前确认 20 MiB 对象在清理时被读完，修复后中止下载；覆盖读取异常、清理异常和恰好 10 MiB 成功。最终原命令 `./mvnw -B -DskipTests package` 于 16:21:47 +08:00 成功，耗时 1.071 秒；Java 21.0.12，打包有意跳过测试，完整测试已另行执行。此波次仅更改 OSS 读取及其测试、此手册和依赖评估材料；无依赖升级。
+
 Java 21 打包最终按原命令 `./mvnw -B -DskipTests package` 成功（2026-09-12 15:54:28 +08:00，0.733 秒）；该打包步骤按参数有意不执行测试，不能代替上述完整测试。产物为 `backend/target/backend-0.0.1-SNAPSHOT.jar`（约 86 MiB），已完成 Spring Boot repackage，包含 OSS 适配类及 `aliyun-sdk-oss-3.18.5.jar`、`credentials-java-1.0.6.jar`、`tea-1.4.2.jar`。未构建/推送云镜像或执行部署。首次打包受本地 Maven 缓存写权限限制；隔离外下载曾停滞，仅中止本次进程后使用已核实的 Maven 传输超时做一次执行级有界重试，成功后原命令再次通过；未改依赖、构建文件或删除缓存。
 
 仓库根目录的 `git diff --check` 与显式暂存后的 `git diff --cached --check` 用于空白检查；本轮范围仅 README、此手册、照片接口测试及单独获批的媒体不可用提示字面量。前端、数据库迁移、连接配置和现有 MinIO 数据均未更改。
@@ -55,7 +59,7 @@ Java 21 打包最终按原命令 `./mvnw -B -DskipTests package` 成功（2026-0
 
 新增接口测试使用既有所有权 fixture 和本地 Testcontainers 数据库，注入含人工秘密/Endpoint/对象键哨兵的存储异常，验证响应正文不泄露这些内容。首个可运行结果暴露原处理器固定英文提示与批准中文要求不一致；经单独范围裁定，仅替换媒体不可用的一个固定字面量，不转发异常消息或 cause，不做其他接口本地化，保持 `503`、code 和响应结构不变。
 
-Java 21 客户端及 XML 兼容性验证的边界：实际 SDK `ErrorResponseParser` 的人工 XML 测试仅刻画这一错误解析路径，不证明所有 JAXB 操作或真实云签名可用；假的凭证供应方轮换也不是云端到期刷新验证。公开安全公告核验仍不完整：官方 OSS 公告页面出现不适用的筛选和加载错误，credentials-java / tea-java 公告获取失败，HttpClient 公告重试也未完成。不得据此声称“无漏洞”或“生产安全已批准”；固定依赖和本地通过不能解除后续可靠安全公告评估门槛。
+Java 21 客户端及 XML 兼容性验证的边界：实际 SDK `ErrorResponseParser` 的人工 XML 测试仅刻画这一错误解析路径，不证明所有 JAXB 操作或真实云签名可用；假的凭证供应方轮换也不是云端到期刷新验证。此前公告页面获取失败的缺口已由上述可靠查询及官方公告逐项评估补足；当前评估是时间点和配置限定的结论。部署前必须重新查询并核对有效运行配置，尤其 HTTP/2、容器认证、Jackson 绑定与日志配置是否改变适用性。固定依赖和本地通过不等于“生产安全已批准”。
 
 ## 尚未云验收：需要单独批准的步骤
 
