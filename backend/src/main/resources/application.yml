@@ -39,3 +39,15 @@ management:
     health:
       probes:
         enabled: true
+
+# SDK errors and transport diagnostics may contain credentials, request headers,
+# object keys, or response bodies. Keep application-level generic failure logs.
+logging:
+  level:
+    com.aliyun.oss: OFF
+    com.aliyun.credentials: OFF
+    org.apache.http: OFF
+    org.apache.http.headers: OFF
+    org.apache.http.wire: OFF
+    okhttp3: OFF
+    jdk.httpclient.HttpClient: OFF
