@@ -22,7 +22,7 @@
 - 显式使用 ECS RAM 角色与 IMDSv2；不静默降级到 IMDSv1，不使用默认凭证链。
 - 不输出 Token、密钥、SDK 错误正文或请求头；外部错误继续使用中文通用提示。
 - 不使用 host 网络、privileged 容器解决 IMDS 连通性问题。
-- SSL 未修复前禁止通过关闭加密参数来执行 RDS 迁移或认证。
+- 正式业务要求 RDS TLS；用户批准的学习环境仅允许同 VPC 私网、ECS 单独白名单、测试/非敏感数据、普通账号强密码及备份条件下明确采用非加密连接。本子项目仍不执行云数据库认证、迁移或连接配置变更；浏览器和 OSS HTTPS 不放宽。
 - 不关闭生产 Secure Cookie，不把照片改为公开读；真实云验证单独取得授权。
 
 ## 执行约定与文件边界
@@ -619,7 +619,7 @@ git commit -m "feat: implement private OSS media storage"
 
 **Files:** 创建 `docs/runbooks/oss-private-media.md`；修改 `README.md`；仅在缺少脱敏回归覆盖时扩展 `backend/src/test/java/com/fishbook/catchlog/web/CatchPhotoApiIntegrationTest.java`。其他既有测试只运行、不重构。
 
-**Interfaces:** 使用原照片 API 和所有权检查；新增手册不得提供可直接绕过 RDS TLS 的上线命令。
+**Interfaces:** 使用原照片 API 和所有权检查；新增手册说明设计第 8 节学习环境例外，不提供未经授权的云数据库连接、迁移或降低正式业务 RDS TLS 的上线命令。
 
 - [ ] **Step 1: 确认对外错误脱敏覆盖（2–5 分钟）**
 
@@ -677,7 +677,7 @@ fishbook:
 3. 容器内 IMDSv2 token 获取及临时凭证到期刷新需云验收，不记录响应/Token；无 host/privileged 绕过。
 4. 单独批准后，用批准的独立测试前缀、明确唯一对象键上传小图片；读取并比较完整字节与 MIME，匿名访问必须拒绝；连续删除两次，仅清理该键，不批量删除。
 5. 云端验证未做就标“尚未云验收”，不说“照片生产可用”；自动化测试不替代真实签名/权限/刷新验证。
-6. RDS TLS 工单待解决；不执行认证/迁移、不关闭证书身份校验；非公开 TLS 入口、镜像交付和域名备案属于后续子项目。
+6. 工单已确认当前本地盘 MySQL 8.4 暂不支持 SSL；说明用户批准的学习环境例外及非加密风险，本子项目仍不执行云认证/迁移或数据库连接配置变更。正式业务需要恢复 RDS TLS/证书身份校验；浏览器和 OSS HTTPS 不放宽，非公开 TLS 入口、镜像交付和域名备案属于后续子项目。
 7. 本地回滚可用 MinIO，生产业务写入 OSS 后保持可读 OSS 的上一版镜像及原 Bucket，不能简单切 MinIO 丢失照片读取路径；无本地数据迁移删除。
 
 README 仅新增相对链接 `[OSS 私有照片接入](docs/runbooks/oss-private-media.md)`，描述“实现与云验收前置条件”，不改正式上线状态。
@@ -707,7 +707,7 @@ git diff --cached --check
 git commit -m "docs: document OSS validation and rollout gates"
 ```
 
-若扩展了照片故障回归，单独显式加入该测试文件后提交，不 git add 整仓库。用 verification-before-completion 技能检查证据，再报告：已完成的适配与本地测试、仍未做的真实 OSS 验收、安全核验是否完成、RDS TLS 仍阻挡生产启动、下一项需用户确认的云资源操作。
+若扩展了照片故障回归，单独显式加入该测试文件后提交，不 git add 整仓库。用 verification-before-completion 技能检查证据，再报告：已完成的适配与本地测试、仍未做的真实 OSS 验收、安全核验是否完成、学习环境 RDS TLS 例外及其边界（不等于已部署）、下一项需用户确认的云资源操作。
 
 ## 设计覆盖与计划自审
 
