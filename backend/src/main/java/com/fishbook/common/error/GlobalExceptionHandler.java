@@ -157,7 +157,7 @@ public class GlobalExceptionHandler {
         return error(
                 HttpStatus.SERVICE_UNAVAILABLE,
                 "MEDIA_STORAGE_UNAVAILABLE",
-                "Media storage is temporarily unavailable",
+                "媒体存储暂时不可用",
                 List.of(),
                 request);
     }

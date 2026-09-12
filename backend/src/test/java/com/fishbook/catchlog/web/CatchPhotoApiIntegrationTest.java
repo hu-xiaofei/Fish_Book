@@ -203,6 +203,23 @@ class CatchPhotoApiIntegrationTest {
                 .andExpect(jsonPath("$.code").value("MEDIA_STORAGE_UNAVAILABLE"));
     }
 
+    @Test
+    void storageFailureDoesNotExposeSdkDetails() throws Exception {
+        long id = insertCatch(USER_ID, "catches/9601/private");
+        var failure = new MediaStorageUnavailableException(new IllegalStateException(
+                "sentinel-secret endpoint=https://private.invalid key=catches/private"));
+        when(mediaStore.get("catches/9601/private")).thenThrow(failure);
+
+        var result = mvc.perform(get("/api/v1/catches/{id}/photo", id).with(user(USER_EMAIL)))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("MEDIA_STORAGE_UNAVAILABLE"))
+                .andReturn();
+
+        assertThat(result.getResponse().getContentAsString())
+                .contains("媒体存储暂时不可用")
+                .doesNotContain("sentinel-secret", "private.invalid", "catches/private");
+    }
+
     private void assertInvalid(long id, MockMultipartFile photo) throws Exception {
         mvc.perform(multipart(HttpMethod.PUT, "/api/v1/catches/{id}/photo", id)
                         .file(photo).with(user(USER_EMAIL)).with(csrf()))

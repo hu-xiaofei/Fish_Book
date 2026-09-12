@@ -186,6 +186,7 @@ Fish_Book/
 ### 相关文档
 
 - [本地开发与故障排查手册](docs/runbooks/local-development.md)
+- [OSS 私有照片接入](docs/runbooks/oss-private-media.md)：实现与云验收前置条件。
 - [鱼类资料与图片来源记录](docs/data-sources/fish-catalog-attribution.md)
 - [FishBook MVP 设计规格](docs/superpowers/specs/2026-08-07-fishbook-mvp-design.md)
 - [鱼类图鉴核心设计规格](docs/superpowers/specs/2026-08-11-fish-catalog-core-design.md)
