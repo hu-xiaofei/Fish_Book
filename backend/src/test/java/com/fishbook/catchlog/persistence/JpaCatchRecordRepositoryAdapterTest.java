@@ -1,6 +1,7 @@
 package com.fishbook.catchlog.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fishbook.catchlog.domain.CatchRecord;
 import com.fishbook.catchlog.domain.CatchRecordDetails;
@@ -15,6 +16,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @DataJpaTest
 @Import({MySqlTestConfiguration.class, JpaCatchRecordRepositoryAdapter.class})
@@ -27,6 +33,32 @@ class JpaCatchRecordRepositoryAdapterTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void rejectsAStaleCommittedPhotoUpdateWithoutRestoringTheOldPhoto() {
+        // Bug caught: merging an old domain snapshot could overwrite a committed replacement.
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        CatchRecord initial = transaction.execute(status -> adapter.save(recordFor(
+                USER_ID, 1L, LocalDate.parse("2026-09-01"),
+                Instant.parse("2026-09-01T00:00:00Z"), "测试钓点", "old")));
+        CatchRecord stale = transaction.execute(status ->
+                adapter.findByIdAndUserId(initial.id(), USER_ID).orElseThrow());
+        CatchRecord winner = transaction.execute(status ->
+                adapter.findByIdAndUserId(initial.id(), USER_ID).orElseThrow());
+        transaction.executeWithoutResult(status -> adapter.save(
+                winner.withPhotoObjectKey("new", Instant.parse("2026-09-01T00:00:01Z"))));
+
+        assertThatThrownBy(() -> transaction.executeWithoutResult(status -> adapter.save(
+                stale.withPhotoObjectKey("stale", Instant.parse("2026-09-01T00:00:02Z")))))
+                .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT photo_object_key FROM catch_records WHERE id = ?", String.class, initial.id()))
+                .isEqualTo("new");
+    }
 
     @BeforeEach
     void setUp() {
@@ -62,9 +94,11 @@ class JpaCatchRecordRepositoryAdapterTest {
                     assertThat(record.details().location()).isEqualTo("更新后的钓点");
                     assertThat(record.updatedAt()).isEqualTo(Instant.parse("2026-08-20T02:00:00Z"));
                 });
-        assertThat(adapter.deleteByIdAndUserId(saved.id(), USER_ID)).isTrue();
+        assertThat(saved.version()).isZero();
+        assertThat(updated.version()).isEqualTo(1L);
+        assertThat(adapter.deleteByIdAndUserId(saved.id(), USER_ID, updated.version())).isTrue();
         assertThat(adapter.findByIdAndUserId(saved.id(), USER_ID)).isEmpty();
-        assertThat(adapter.deleteByIdAndUserId(saved.id(), USER_ID)).isFalse();
+        assertThat(adapter.deleteByIdAndUserId(saved.id(), USER_ID, updated.version())).isFalse();
     }
 
     @Test
@@ -75,8 +109,34 @@ class JpaCatchRecordRepositoryAdapterTest {
                 Instant.parse("2026-08-20T01:00:00Z"), "我的水库", null));
 
         assertThat(adapter.findByIdAndUserId(saved.id(), OTHER_USER_ID)).isEmpty();
-        assertThat(adapter.deleteByIdAndUserId(saved.id(), OTHER_USER_ID)).isFalse();
+        assertThat(adapter.deleteByIdAndUserId(saved.id(), OTHER_USER_ID, saved.version())).isFalse();
         assertThat(adapter.findByIdAndUserId(saved.id(), USER_ID)).contains(saved);
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void rejectsStaleDeleteAfterCommittedReplacementAndAllowsCurrentVersionDelete() {
+        // Bug caught: deleting an old snapshot could remove the replacement and clean an obsolete key.
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        CatchRecord initial = transaction.execute(status -> adapter.save(recordFor(
+                USER_ID, 1L, LocalDate.parse("2026-09-01"),
+                Instant.parse("2026-09-01T00:00:00Z"), "测试钓点", "old")));
+        CatchRecord stale = transaction.execute(status -> adapter.findById(initial.id()).orElseThrow());
+        CatchRecord newer = transaction.execute(status -> adapter.save(
+                stale.withPhotoObjectKey("new", Instant.parse("2026-09-01T00:00:01Z"))));
+
+        assertThat(newer.version()).isEqualTo(1L);
+        Boolean staleDeleted = transaction.execute(status ->
+                adapter.deleteByIdAndUserId(initial.id(), USER_ID, stale.version()));
+        assertThat(staleDeleted).isFalse();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT photo_object_key FROM catch_records WHERE id = ?", String.class, initial.id()))
+                .isEqualTo("new");
+        var current = transaction.execute(status -> adapter.findByIdAndUserId(initial.id(), USER_ID));
+        assertThat(current).contains(newer);
+        Boolean currentDeleted = transaction.execute(status ->
+                adapter.deleteByIdAndUserId(initial.id(), USER_ID, newer.version()));
+        assertThat(currentDeleted).isTrue();
     }
 
     @Test

@@ -188,14 +188,18 @@ class DefaultCatchRecordApplicationServiceTest {
     }
 
     @Test
-    void deletesOnlyTheAuthenticatedUsersRecordAndReportsMissingRecords() {
+    void rejectsAConcurrentRecordDeleteWithoutEnqueuingTheObsoletePhoto() {
+        repository.ownedRecord = Optional.of(record(
+                31L, 1L, LocalDate.parse("2026-08-20"), "obsolete"));
         repository.deleteResult = false;
 
         assertThatThrownBy(() -> service.delete("angler@example.com", 31L))
-                .isInstanceOfSatisfying(CatchRecordNotFoundException.class,
-                        error -> assertThat(error.code()).isEqualTo("CATCH_RECORD_NOT_FOUND"));
+                .isInstanceOfSatisfying(CatchPhotoConflictException.class,
+                        error -> assertThat(error.code()).isEqualTo("CATCH_PHOTO_CONFLICT"));
         assertThat(repository.deletedId).isEqualTo(31L);
         assertThat(repository.deletedUserId).isEqualTo(41L);
+        assertThat(repository.deletedVersion).isEqualTo(7L);
+        assertThat(cleanupJobs.enqueued).isEmpty();
     }
 
     @Test
@@ -241,7 +245,7 @@ class DefaultCatchRecordApplicationServiceTest {
                         fishId, caughtOn, "城郊水库", new BigDecimal("42.5"),
                         new BigDecimal("1350"), "路亚", "傍晚近岸中鱼"),
                 photoObjectKey, Instant.parse("2026-08-19T12:00:00Z"),
-                Instant.parse("2026-08-19T12:00:00Z"));
+                Instant.parse("2026-08-19T12:00:00Z"), 7L);
     }
 
     private static MediaCleanupService cleanupService(RecordingCleanupRepository repository) {
@@ -331,6 +335,7 @@ class DefaultCatchRecordApplicationServiceTest {
         private int lastSize;
         private long deletedId;
         private long deletedUserId;
+        private long deletedVersion;
         private boolean deleteResult = true;
 
         @Override
@@ -349,6 +354,11 @@ class DefaultCatchRecordApplicationServiceTest {
         }
 
         @Override
+        public Optional<CatchRecord> findById(long id) {
+            return ownedRecord;
+        }
+
+        @Override
         public CatchRecordPage findByUserId(long userId, int page, int size) {
             lastListUserId = userId;
             lastPage = page;
@@ -357,9 +367,10 @@ class DefaultCatchRecordApplicationServiceTest {
         }
 
         @Override
-        public boolean deleteByIdAndUserId(long id, long userId) {
+        public boolean deleteByIdAndUserId(long id, long userId, long version) {
             deletedId = id;
             deletedUserId = userId;
+            deletedVersion = version;
             return deleteResult;
         }
     }

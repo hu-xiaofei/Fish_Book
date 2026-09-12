@@ -237,12 +237,17 @@ class DefaultCatchPhotoApplicationServiceTest {
         }
 
         @Override
+        public Optional<CatchRecord> findById(long id) {
+            return current.id() == id ? Optional.of(current) : Optional.empty();
+        }
+
+        @Override
         public CatchRecordPage findByUserId(long userId, int page, int size) {
             throw new UnsupportedOperationException();
         }
 
         @Override
-        public boolean deleteByIdAndUserId(long id, long userId) {
+        public boolean deleteByIdAndUserId(long id, long userId, long version) {
             throw new UnsupportedOperationException();
         }
     }

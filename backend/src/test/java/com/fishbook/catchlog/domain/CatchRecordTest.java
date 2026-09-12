@@ -122,9 +122,21 @@ class CatchRecordTest {
         CatchRecord record = CatchRecord.create(9L, validDetails(TODAY, null, null, TODAY), CREATED_AT);
 
         assertThat(record.id()).isNull();
+        assertThat(record.version()).isNull();
         assertThat(record.photoObjectKey()).isNull();
         assertThat(record.createdAt()).isEqualTo(Instant.parse("2026-08-20T10:15:30Z"));
         assertThat(record.updatedAt()).isEqualTo(Instant.parse("2026-08-20T10:15:30Z"));
+    }
+
+    @Test
+    void preservesPersistedVersionAcrossMetadataAndPhotoMutations() {
+        // Bug caught: a mutation could reset the snapshot version and defeat stale-write protection.
+        CatchRecord original = CatchRecord.restore(12L, 9L,
+                validDetails(TODAY, null, null, TODAY), "old", CREATED_AT, UPDATED_AT, 7L);
+        assertThat(original.update(validDetails(TODAY, null, null, TODAY), UPDATED_AT).version())
+                .isEqualTo(7L);
+        assertThat(original.withPhotoObjectKey("new", UPDATED_AT).version()).isEqualTo(7L);
+        assertThat(original.withoutPhoto(UPDATED_AT).version()).isEqualTo(7L);
     }
 
     @Test

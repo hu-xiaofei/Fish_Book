@@ -24,7 +24,12 @@ public class JpaCatchRecordRepositoryAdapter implements CatchRecordRepository {
     @Override
     @Transactional
     public CatchRecord save(CatchRecord record) {
-        return toDomain(repository.save(toEntity(record)));
+        return toDomain(repository.saveAndFlush(toEntity(record)));
+    }
+
+    @Override
+    public Optional<CatchRecord> findById(long id) {
+        return repository.findById(id).map(this::toDomain);
     }
 
     @Override
@@ -47,8 +52,8 @@ public class JpaCatchRecordRepositoryAdapter implements CatchRecordRepository {
 
     @Override
     @Transactional
-    public boolean deleteByIdAndUserId(long id, long userId) {
-        return repository.deleteByIdAndUserId(id, userId) > 0;
+    public boolean deleteByIdAndUserId(long id, long userId, long version) {
+        return repository.deleteByIdAndUserId(id, userId, version) > 0;
     }
 
     private CatchRecord toDomain(CatchRecordJpaEntity entity) {
@@ -65,12 +70,14 @@ public class JpaCatchRecordRepositoryAdapter implements CatchRecordRepository {
                         entity.getNotes()),
                 entity.getPhotoObjectKey(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt());
+                entity.getUpdatedAt(),
+                entity.getVersion());
     }
 
     private CatchRecordJpaEntity toEntity(CatchRecord record) {
         CatchRecordJpaEntity entity = new CatchRecordJpaEntity();
         entity.setId(record.id());
+        entity.setVersion(record.version());
         entity.setUserId(record.userId());
         entity.setFishSpeciesId(record.details().fishId());
         entity.setCaughtOn(record.details().caughtOn());

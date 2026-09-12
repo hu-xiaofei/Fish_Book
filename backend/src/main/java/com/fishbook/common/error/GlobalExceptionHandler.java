@@ -7,6 +7,7 @@ import com.fishbook.catalog.domain.InvalidFishSpeciesException;
 import com.fishbook.catalog.domain.InvalidPublicationTransitionException;
 import com.fishbook.catchlog.application.InvalidCatchRecordQueryException;
 import com.fishbook.catchlog.application.CatchPhotoNotFoundException;
+import com.fishbook.catchlog.application.CatchPhotoConflictException;
 import com.fishbook.catchlog.domain.CatchRecordNotFoundException;
 import com.fishbook.catchlog.domain.InvalidCatchRecordException;
 import com.fishbook.favorites.application.InvalidFavoriteQueryException;
@@ -25,6 +26,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -42,6 +44,13 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 public class GlobalExceptionHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler({CatchPhotoConflictException.class, ObjectOptimisticLockingFailureException.class})
+    ResponseEntity<ApiErrorResponse> handleCatchPhotoConflict(
+            RuntimeException exception, HttpServletRequest request) {
+        return error(HttpStatus.CONFLICT, "CATCH_PHOTO_CONFLICT",
+                "照片或记录已被修改，请刷新后重新确认操作", List.of(), request);
+    }
 
     @ExceptionHandler(InvalidCatalogQueryException.class)
     ResponseEntity<ApiErrorResponse> handleInvalidCatalogQuery(

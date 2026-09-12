@@ -9,7 +9,8 @@ public record CatchRecord(
         CatchRecordDetails details,
         String photoObjectKey,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        Long version) {
 
     public CatchRecord {
         Objects.requireNonNull(details, "details must not be null");
@@ -24,8 +25,14 @@ public record CatchRecord(
         }
     }
 
+    /** Compatibility constructor for local fixtures; persistence must supply the stored version. */
+    public CatchRecord(Long id, long userId, CatchRecordDetails details, String photoObjectKey,
+            Instant createdAt, Instant updatedAt) {
+        this(id, userId, details, photoObjectKey, createdAt, updatedAt, id == null ? null : 0L);
+    }
+
     public static CatchRecord create(long userId, CatchRecordDetails details, Instant now) {
-        return new CatchRecord(null, userId, details, null, now, now);
+        return new CatchRecord(null, userId, details, null, now, now, null);
     }
 
     public static CatchRecord restore(
@@ -34,15 +41,21 @@ public record CatchRecord(
         return new CatchRecord(id, userId, details, photoObjectKey, createdAt, updatedAt);
     }
 
+    public static CatchRecord restore(
+            long id, long userId, CatchRecordDetails details, String photoObjectKey,
+            Instant createdAt, Instant updatedAt, Long version) {
+        return new CatchRecord(id, userId, details, photoObjectKey, createdAt, updatedAt, version);
+    }
+
     public CatchRecord update(CatchRecordDetails next, Instant now) {
-        return new CatchRecord(id, userId, next, photoObjectKey, createdAt, now);
+        return new CatchRecord(id, userId, next, photoObjectKey, createdAt, now, version);
     }
 
     public CatchRecord withPhotoObjectKey(String objectKey, Instant now) {
-        return new CatchRecord(id, userId, details, objectKey, createdAt, now);
+        return new CatchRecord(id, userId, details, objectKey, createdAt, now, version);
     }
 
     public CatchRecord withoutPhoto(Instant now) {
-        return new CatchRecord(id, userId, details, null, createdAt, now);
+        return new CatchRecord(id, userId, details, null, createdAt, now, version);
     }
 }

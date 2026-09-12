@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -16,6 +17,10 @@ class CatchRecordJpaEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Version
+    @Column(nullable = false)
+    private Long version;
 
     @Column(name = "user_id", nullable = false)
     private long userId;
@@ -58,6 +63,14 @@ class CatchRecordJpaEntity {
 
     void setId(Long id) {
         this.id = id;
+    }
+
+    Long getVersion() {
+        return version;
+    }
+
+    void setVersion(Long version) {
+        this.version = version;
     }
 
     long getUserId() {

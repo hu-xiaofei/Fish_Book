@@ -16,6 +16,7 @@ interface SpringDataCatchRecordJpaRepository
 
     @Modifying
     @Query("DELETE FROM CatchRecordJpaEntity record "
-            + "WHERE record.id = :id AND record.userId = :userId")
-    long deleteByIdAndUserId(@Param("id") long id, @Param("userId") long userId);
+            + "WHERE record.id = :id AND record.userId = :userId AND record.version = :version")
+    long deleteByIdAndUserId(@Param("id") long id, @Param("userId") long userId,
+            @Param("version") long version);
 }

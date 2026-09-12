@@ -106,8 +106,8 @@ public class DefaultCatchRecordApplicationService implements CatchRecordApplicat
     public void delete(String authenticatedEmail, long id) {
         UserView user = currentUser(authenticatedEmail);
         CatchRecord existing = ownedRecord(id, user.id());
-        if (!catchRecordRepository.deleteByIdAndUserId(id, user.id())) {
-            throw new CatchRecordNotFoundException(id);
+        if (!catchRecordRepository.deleteByIdAndUserId(id, user.id(), existing.version())) {
+            throw new CatchPhotoConflictException();
         }
         if (existing.photoObjectKey() != null) {
             cleanupService.enqueue(
