@@ -10,6 +10,17 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-12-oss-private-media-design.md`（先完整阅读已批准设计）。
 
+## 实施勘误（优先于下方原始示例）
+
+实施时已验证并调整以下细节；下方保留的早期示例不能直接作为最终实现复制：
+
+- MinIO/OSS 两个具体配置类同时设置 enabled 和 provider 条件，不使用可能被独立扫描的嵌套配置绕过关闭条件。以 `MinioConfiguration`、`OssConfiguration` 及配置测试为准。
+- 生命周期测试使用生产 `OssConfiguration` 的资源所有权和依赖关系；手动注册测试 Bean 的早期示例不能单独证明生产资源会关闭。
+- OSS Maven 坐标为 `com.aliyun.oss:aliyun-sdk-oss:3.18.5`；`aliyun-oss-java-sdk` 是源码仓库名，不是 Maven artifactId。
+- SDK 会自行输出异常详情，因此 Task 3 还包含 `application.yml` 默认敏感日志抑制、`OssLoggingPrivacyTest` 行为测试，以及 `OssSdkResponseCompatibilityTest` 的离线 XML 解析兼容性检查。保留应用通用错误日志，不输出 SDK 错误正文或请求头。
+
+依赖安全公告核验和真实云签名、权限、IMDSv2 到期刷新仍是未完成的独立验收项；本地测试不能替代这些检查。学习环境数据库 TLS 例外以设计第 8 节为准。
+
 ## Global Constraints
 
 - 本文不授权创建 Bucket、变更 RAM 权限、产生新费用或执行线上数据写入。
@@ -245,7 +256,7 @@ git commit -m "feat: add compatible media provider configuration"
 <!-- dependencies -->
 <dependency>
   <groupId>com.aliyun.oss</groupId>
-  <artifactId>aliyun-oss-java-sdk</artifactId>
+  <artifactId>aliyun-sdk-oss</artifactId>
   <version>3.18.5</version>
 </dependency>
 <dependency>
@@ -572,7 +583,7 @@ void contextClosesClientAndProvider() {
 
 - [ ] **Step 8: 实现 OSS 条件配置（2–5 分钟）**
 
-采用与 MinIO 相同的双层条件配置：OssConfiguration 外层 enabled=true，内部静态 EnabledOssConfiguration 为 provider=oss，`@EnableConfigurationProperties(OssProperties.class)` 和以下 Bean 放在内部配置，避免本地被 OSS 缺失参数阻挡。凭证 Bean 用 `@ConditionalOnMissingBean(OssRoleCredentialsProvider.class)` 允许测试替身；只有凭证 Bean 使用该注解，MediaStore 不自动回退。
+采用具体配置类上的双条件：OssConfiguration 同时要求 enabled=true 和 provider=oss，`@EnableConfigurationProperties(OssProperties.class)` 和以下 Bean 放在该配置类，避免独立扫描嵌套类绕过关闭条件，也避免本地被 OSS 缺失参数阻挡。凭证 Bean 用 `@ConditionalOnMissingBean(OssRoleCredentialsProvider.class)` 允许测试替身；只有凭证 Bean 使用该注解，MediaStore 不自动回退。
 
 ```java
 @Bean(destroyMethod = "close")
