@@ -18,6 +18,7 @@ export type CatchRecordSummary = Omit<CatchRecordInput, 'notes'> & {
 
 export type CatchRecordDetail = CatchRecordSummary & {
   notes: string | null;
+  revision: string;
 };
 
 export type CatchRecordPage = {

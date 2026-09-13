@@ -59,7 +59,8 @@ describe('catch records API', () => {
   });
 
   test('requests an individual catch record by ID', async () => {
-    const response = { id: 31, ...input, commonNameZh: '乌鳢', hasPhoto: false };
+    const response = { id: 31, ...input, revision: '7', commonNameZh: '乌鳢', hasPhoto: false,
+      createdAt: '2026-08-20T08:00:00Z', updatedAt: '2026-08-20T08:00:00Z' };
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(response));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -72,7 +73,8 @@ describe('catch records API', () => {
   });
 
   test('creates a record with JSON through the shared CSRF client', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: 31, ...input }));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: 31, ...input, revision: '7',
+      commonNameZh: '乌鳢', hasPhoto: false, createdAt: '2026-08-20T08:00:00Z', updatedAt: '2026-08-20T08:00:00Z' }));
     vi.stubGlobal('fetch', fetchMock);
 
     await createCatchRecord(input);
@@ -88,7 +90,8 @@ describe('catch records API', () => {
   });
 
   test('updates a record with the complete JSON representation', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: 31, ...input }));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: 31, ...input, revision: '8',
+      commonNameZh: '乌鳢', hasPhoto: false, createdAt: '2026-08-20T08:00:00Z', updatedAt: '2026-08-20T09:00:00Z' }));
     vi.stubGlobal('fetch', fetchMock);
 
     await updateCatchRecord(31, input);

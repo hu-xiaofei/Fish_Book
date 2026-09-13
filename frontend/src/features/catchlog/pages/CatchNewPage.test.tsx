@@ -13,15 +13,16 @@ import { FAVORITES_QUERY_KEY } from '../../favorites/api/favoritesApi';
 import type { CatchRecordDetail, CatchRecordPage } from '../model/types';
 import { CatchNewPage } from './CatchNewPage';
 
-const { createCatchRecordMock, fetchFishOptionsMock, putCatchPhotoMock } = vi.hoisted(() => ({
+const { createCatchRecordMock, fetchCatchRecordMock, fetchFishOptionsMock, putCatchPhotoMock } = vi.hoisted(() => ({
   createCatchRecordMock: vi.fn(),
+  fetchCatchRecordMock: vi.fn(),
   fetchFishOptionsMock: vi.fn(),
   putCatchPhotoMock: vi.fn(),
 }));
 
 vi.mock('../api/catchRecordsApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/catchRecordsApi')>();
-  return { ...actual, createCatchRecord: createCatchRecordMock };
+  return { ...actual, createCatchRecord: createCatchRecordMock, fetchCatchRecord: fetchCatchRecordMock };
 });
 
 vi.mock('../../catalog/api/catalogApi', async (importOriginal) => {
@@ -36,6 +37,7 @@ vi.mock('../api/catchPhotoApi', async (importOriginal) => {
 
 const savedCatch: CatchRecordDetail = {
   id: 31,
+  revision: '7',
   fishSlug: 'channa-argus',
   commonNameZh: '乌鳢',
   caughtOn: '2026-08-20',
@@ -143,6 +145,8 @@ async function completeRequiredFields(user: ReturnType<typeof userEvent.setup>) 
 
 beforeEach(() => {
   createCatchRecordMock.mockReset();
+  fetchCatchRecordMock.mockReset();
+  fetchCatchRecordMock.mockResolvedValue(savedCatch);
   fetchFishOptionsMock.mockReset();
   putCatchPhotoMock.mockReset();
   fetchFishOptionsMock.mockResolvedValue([
@@ -228,10 +232,137 @@ test('keeps a successfully created record when optional photo upload fails and a
   expect(queryClient.getQueryData(catchDetailQueryKey(31))).toEqual(savedCatch);
 
   await user.click(screen.getByRole('button', { name: '重试上传' }));
+  expect(await screen.findByText('当前记录版本：7；暂无照片')).toBeInTheDocument();
+  expect(putCatchPhotoMock).toHaveBeenCalledTimes(1);
+  fetchCatchRecordMock.mockResolvedValue({ ...savedCatch, hasPhoto: true, revision: '8' });
+  await user.click(screen.getByRole('button', { name: '确认上传照片' }));
   await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/catches/31'));
   expect(putCatchPhotoMock).toHaveBeenCalledTimes(2);
+  expect(putCatchPhotoMock).toHaveBeenNthCalledWith(1, 31, photo, '7');
+  expect(putCatchPhotoMock).toHaveBeenNthCalledWith(2, 31, photo, '7');
   expect(queryClient.getQueryData<CatchRecordDetail>(catchDetailQueryKey(31))?.hasPhoto)
     .toBe(true);
+});
+
+test('changed optional-upload retry state is displayed and never silently uploaded', async () => {
+  createCatchRecordMock.mockResolvedValue(savedCatch);
+  putCatchPhotoMock.mockRejectedValueOnce(new Error('unavailable'));
+  fetchCatchRecordMock.mockResolvedValue({ ...savedCatch, revision: '8', hasPhoto: true });
+  const { user } = renderNewPage();
+  const photo = new File(['jpeg'], 'catch.jpg', { type: 'image/jpeg' });
+  await completeRequiredFields(user);
+  await user.upload(screen.getByLabelText('照片（可选）'), photo);
+  await user.click(screen.getByRole('button', { name: '保存记录' }));
+  await user.click(await screen.findByRole('button', { name: '重试上传' }));
+
+  expect(await screen.findByText('当前记录版本：8；已有照片')).toBeInTheDocument();
+  expect(screen.getByText('照片或记录已被修改，请刷新后重新确认操作')).toBeInTheDocument();
+  expect(putCatchPhotoMock).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole('button', { name: '确认上传照片' })).toBeEnabled();
+});
+
+test('a retry confirmation closes when its reviewed revision changes in the cache', async () => {
+  createCatchRecordMock.mockResolvedValue(savedCatch);
+  putCatchPhotoMock.mockRejectedValueOnce(new Error('unavailable'));
+  const { user, queryClient } = renderNewPage();
+  await completeRequiredFields(user);
+  await user.upload(screen.getByLabelText('照片（可选）'), new File(['jpeg'], 'catch.jpg', { type: 'image/jpeg' }));
+  await user.click(screen.getByRole('button', { name: '保存记录' }));
+  await user.click(await screen.findByRole('button', { name: '重试上传' }));
+  await screen.findByRole('alertdialog');
+  queryClient.setQueryData(catchDetailQueryKey(31), { ...savedCatch, revision: '9', hasPhoto: true });
+
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+  expect(screen.getByText('照片或记录已被修改，请刷新后重新确认操作')).toBeInTheDocument();
+  expect(putCatchPhotoMock).toHaveBeenCalledTimes(1);
+});
+
+test('retry stays disabled during successful upload current-state refresh', async () => {
+  createCatchRecordMock.mockResolvedValue(savedCatch);
+  putCatchPhotoMock.mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce(undefined);
+  const refreshing = deferred<CatchRecordDetail>();
+  fetchCatchRecordMock.mockResolvedValueOnce(savedCatch).mockReturnValueOnce(refreshing.promise);
+  const { user } = renderNewPage();
+  await completeRequiredFields(user);
+  await user.upload(screen.getByLabelText('照片（可选）'), new File(['jpeg'], 'catch.jpg', { type: 'image/jpeg' }));
+  await user.click(screen.getByRole('button', { name: '保存记录' }));
+  await user.click(await screen.findByRole('button', { name: '重试上传' }));
+  await user.click(await screen.findByRole('button', { name: '确认上传照片' }));
+  await waitFor(() => expect(fetchCatchRecordMock).toHaveBeenCalledTimes(2));
+
+  expect(screen.getByRole('button', { name: '上传中…' })).toBeDisabled();
+  refreshing.resolve({ ...savedCatch, revision: '8', hasPhoto: true });
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/catches/31'));
+});
+
+test('optional photo 401 expires the session and never retries the mutation', async () => {
+  createCatchRecordMock.mockResolvedValue(savedCatch);
+  putCatchPhotoMock.mockRejectedValue(new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED', message: '请先登录', fieldErrors: [], requestId: 'photo-expired',
+  }));
+  const { user, queryClient } = renderNewPage({ cachedCatches: true });
+  await completeRequiredFields(user);
+  await user.upload(screen.getByLabelText('照片（可选）'), new File(['jpeg'], 'catch.jpg', { type: 'image/jpeg' }));
+  await user.click(screen.getByRole('button', { name: '保存记录' }));
+
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/login'));
+  expect(queryClient.getQueryData(catchDetailQueryKey(31))).toBeUndefined();
+  expect(putCatchPhotoMock).toHaveBeenCalledTimes(1);
+  expect(fetchCatchRecordMock).not.toHaveBeenCalled();
+});
+
+test('late retry review 401 cannot expire a subsequently logged-in account', async () => {
+  createCatchRecordMock.mockResolvedValue(savedCatch);
+  putCatchPhotoMock.mockRejectedValueOnce(new Error('unavailable'));
+  const reviewing = deferred<CatchRecordDetail>();
+  fetchCatchRecordMock.mockReturnValue(reviewing.promise);
+  const { user, queryClient } = renderNewPage();
+  await completeRequiredFields(user);
+  await user.upload(screen.getByLabelText('照片（可选）'), new File(['jpeg'], 'catch.jpg', { type: 'image/jpeg' }));
+  await user.click(screen.getByRole('button', { name: '保存记录' }));
+  await user.click(await screen.findByRole('button', { name: '重试上传' }));
+  await user.click(screen.getByRole('button', { name: '完成退出并登录用户 B' }));
+  reviewing.reject(new ApiError(401, {
+    code: 'AUTHENTICATION_REQUIRED', message: '请先登录', fieldErrors: [], requestId: 'stale-review',
+  }));
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/profile'));
+  expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toMatchObject({ id: 2 });
+  expect(putCatchPhotoMock).toHaveBeenCalledTimes(1);
+});
+
+test('late optional-photo success refresh cannot repopulate a different account cache', async () => {
+  createCatchRecordMock.mockResolvedValue(savedCatch);
+  putCatchPhotoMock.mockResolvedValue(undefined);
+  const refreshing = deferred<CatchRecordDetail>();
+  fetchCatchRecordMock.mockReturnValue(refreshing.promise);
+  const { user, queryClient } = renderNewPage();
+  await completeRequiredFields(user);
+  await user.upload(screen.getByLabelText('照片（可选）'), new File(['jpeg'], 'catch.jpg', { type: 'image/jpeg' }));
+  await user.click(screen.getByRole('button', { name: '保存记录' }));
+  await waitFor(() => expect(fetchCatchRecordMock).toHaveBeenCalledWith(31));
+  await user.click(screen.getByRole('button', { name: '完成退出并登录用户 B' }));
+  refreshing.resolve({ ...savedCatch, revision: '8', hasPhoto: true });
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/profile'));
+  expect(queryClient.getQueryData(catchDetailQueryKey(31))).toBeUndefined();
+  expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toMatchObject({ id: 2 });
+  expect(queryClient.getQueryState(catchPageQueryKey(0))?.isInvalidated).toBe(false);
+});
+
+test('optional-upload conflict refreshes metadata but requires a new retry review action', async () => {
+  createCatchRecordMock.mockResolvedValue(savedCatch);
+  putCatchPhotoMock.mockRejectedValueOnce(new ApiError(409, {
+    code: 'CATCH_PHOTO_CONFLICT', message: 'object key secret', fieldErrors: [], requestId: 'new-conflict',
+  }));
+  fetchCatchRecordMock.mockResolvedValue({ ...savedCatch, revision: '8', hasPhoto: true });
+  const { user, queryClient } = renderNewPage();
+  await completeRequiredFields(user);
+  await user.upload(screen.getByLabelText('照片（可选）'), new File(['jpeg'], 'catch.jpg', { type: 'image/jpeg' }));
+  await user.click(screen.getByRole('button', { name: '保存记录' }));
+  expect(await screen.findByText('照片或记录已被修改，请刷新后重新确认操作')).toBeInTheDocument();
+  await waitFor(() => expect(queryClient.getQueryData<CatchRecordDetail>(catchDetailQueryKey(31))?.revision).toBe('8'));
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  expect(putCatchPhotoMock).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText('object key secret')).not.toBeInTheDocument();
 });
 
 test('maps backend field errors and keeps entered values in place', async () => {

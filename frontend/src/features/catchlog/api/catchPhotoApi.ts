@@ -17,14 +17,17 @@ export function validateCatchPhotoFile(file: File): string | undefined {
 export const catchPhotoUrl = (recordId: number) =>
   `/api/v1/catches/${recordId}/photo`;
 
-export function putCatchPhoto(recordId: number, file: File) {
+export function putCatchPhoto(recordId: number, file: File, revision: string) {
   const form = new FormData();
   form.append('photo', file);
   return apiFetch<void>(catchPhotoUrl(recordId), {
     method: 'PUT',
+    headers: { 'If-Match': `"${revision}"` },
     body: form,
   });
 }
 
-export const removeCatchPhoto = (recordId: number) =>
-  apiFetch<void>(catchPhotoUrl(recordId), { method: 'DELETE' });
+export const removeCatchPhoto = (recordId: number, revision: string) =>
+  apiFetch<void>(catchPhotoUrl(recordId), {
+    method: 'DELETE', headers: { 'If-Match': `"${revision}"` },
+  });

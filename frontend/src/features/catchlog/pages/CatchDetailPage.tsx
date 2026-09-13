@@ -147,6 +147,7 @@ export function CatchDetailPage() {
       <CatchPhotoPanel
         key={catchRecord.id}
         recordId={catchRecord.id}
+        revision={catchRecord.revision}
         hasPhoto={catchRecord.hasPhoto}
         photoAlt={`${catchRecord.commonNameZh}钓获照片`}
       />

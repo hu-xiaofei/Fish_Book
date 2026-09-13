@@ -56,6 +56,7 @@ vi.mock('../api/catchPhotoApi', async (importOriginal) => {
 
 const savedCatch: CatchRecordDetail = {
   id: 31,
+  revision: '7',
   fishSlug: 'channa-argus',
   commonNameZh: '乌鳢',
   caughtOn: '2026-08-20',
@@ -226,7 +227,22 @@ test('renders a private photo only when the detail says one exists', async () =>
   renderCatchDetail();
 
   const image = await screen.findByRole('img', { name: '乌鳢钓获照片' });
-  expect(image.getAttribute('src')).toContain('/api/v1/catches/31/photo');
+  expect(image.getAttribute('src')).toContain('/api/v1/catches/31/photo?revision=7');
+  expect(screen.getByText(/你和平台管理员可查看，管理员可因管理需要替换或移除照片。/)).toBeInTheDocument();
+});
+
+test('a simultaneous detail revision change clears upload selection and removal confirmation', async () => {
+  fetchCatchRecordMock.mockResolvedValue({ ...savedCatch, hasPhoto: true });
+  const { user, queryClient } = renderCatchDetail();
+  await user.upload(await screen.findByLabelText('钓获照片'), new File(['jpeg'], 'catch.jpg', { type: 'image/jpeg' }));
+  await user.click(screen.getByRole('button', { name: '移除照片' }));
+  queryClient.setQueryData(catchDetailQueryKey(31), { ...savedCatch, hasPhoto: true, revision: '8' });
+
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+  expect(screen.getByRole('button', { name: '替换照片' })).toBeDisabled();
+  expect(screen.getByLabelText('钓获照片')).toHaveValue('');
+  expect(removeCatchPhotoMock).not.toHaveBeenCalled();
+  expect(putCatchPhotoMock).not.toHaveBeenCalled();
 });
 
 test('renders empty optional fields without inventing measurements or notes', async () => {

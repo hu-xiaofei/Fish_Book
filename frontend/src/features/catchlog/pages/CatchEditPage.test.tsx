@@ -49,6 +49,7 @@ vi.mock('../../auth/api/currentUser', async (importOriginal) => {
 });
 
 const savedCatch: CatchRecordDetail = {
+  revision: '7',
   id: 31,
   fishSlug: 'channa-argus',
   commonNameZh: '乌鳢',
