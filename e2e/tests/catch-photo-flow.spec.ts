@@ -47,7 +47,7 @@ test('uploads, protects, replaces, reloads, and removes one private catch photo'
   const originalResponse = await page.request.get(photoPath);
   expect(originalResponse.status()).toBe(200);
   expect(originalResponse.headers()['content-type']).toContain('image/jpeg');
-  expect(originalResponse.headers()['cache-control']).toBe('private');
+  expect(originalResponse.headers()['cache-control']).toBe('private, no-store');
   const originalBytes = await originalResponse.body();
   expect(originalBytes.byteLength).toBeGreaterThan(0);
 

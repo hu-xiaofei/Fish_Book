@@ -14,7 +14,7 @@ FishBook 是一个面向中国淡水鱼知识学习的全栈鱼类图鉴项目�
 
 ### 项目状态
 
-当前产品闭环已交付身份、公开图鉴、按账号隔离的私有收藏、带可选私有照片的钓获记录，以及管理员图鉴维护。照片由私有 MinIO 存储，上传、读取、替换和移除都受记录所有权校验；图鉴写入则只允许管理员执行。
+当前产品闭环已交付身份、公开图鉴、按账号隔离的私有收藏、带可选私有照片的钓获记录，以及管理员图鉴维护和照片管理。照片由私有 MinIO 存储；用户接口校验记录所有权，独立管理员接口允许查看、替换和删除所有用户照片；图鉴写入只允许管理员执行。
 
 ### 当前功能
 
@@ -47,7 +47,7 @@ FishBook 是一个面向中国淡水鱼知识学习的全栈鱼类图鉴项目�
 - 登录用户可以创建、查看、编辑和删除自己的钓获记录，并关联既有鱼种、日期、地点、长度、重量、钓法和备注。
 - “钓获记录”列表和详情均按账号隔离；访问其他用户的记录会得到统一的未找到结果。
 - 每条记录可选上传一张不超过 10 MiB 的 JPEG、PNG 或 WebP 照片，并可在详情页替换或移除。
-- 照片仅通过需要登录且校验所有权的后端接口读取；不存在的照片和其他用户的照片都返回统一的未找到结果。
+- 照片通过需要登录的后端接口读取：用户接口校验所有权，其他用户的照片统一返回未找到；管理员通过独立管理接口查看、替换和删除照片。照片响应禁止存储缓存。
 - 新建时照片上传失败不会撤销已经保存的记录，用户可在详情页重试。
 
 **管理员图鉴管理**
@@ -55,7 +55,7 @@ FishBook 是一个面向中国淡水鱼知识学习的全栈鱼类图鉴项目�
 - 可选的首次启动引导会创建本地管理员；管理列表、新建和编辑路由分别为 `/admin/fishes`、`/admin/fishes/new` 和 `/admin/fishes/{id}/edit`。
 - 管理员可以新建草稿、编辑内容、发布和下架鱼类；草稿与已下架条目不会出现在公开搜索或公开详情中。
 - `/api/v1/admin/**` 同时执行登录、管理员角色和 CSRF 校验；普通用户在本地管理页面看到“没有管理员权限”，API 请求得到 `403`。
-- 管理员功能只维护公开图鉴，绝不能读取、展示或修改其他用户的私有钓获记录、收藏或照片。
+- 管理员还可通过 `/admin/photos` 按所属用户 ID 筛选、预览、确认替换和删除照片，并查看成功操作记录。钓获详细字段和收藏仍私有，不提供任意钓获记录修改；照片操作使用真实版本，冲突后须重新确认，旧照片不可恢复。
 
 图鉴封面上传、鱼类条目的物理删除和复杂 RBAC 不在当前范围内；当前图鉴仍使用仓库内经过来源审计的公开图片。
 
@@ -86,7 +86,7 @@ Node.js 版本固定为 `24.18.0`。前端和端到端测试依赖均通过各�
 - Spring Boot 按领域、应用、持久化和 Web 边界组织 identity、catalog、administration、favorites 与 catchlog 功能。
 - Flyway 管理数据库表结构和首批鱼类数据迁移。
 - Spring Session 将登录会话保存到 MySQL。
-- MinIO 保存按用户和记录隔离的私有钓获照片；浏览器不能依赖公开对象地址，只能通过所有者鉴权后的后端接口读取。
+- MinIO 保存按用户和记录隔离的私有钓获照片；浏览器通过后端的所有者接口或独立管理员接口读取，不接收公开或预签名对象地址。
 - 图鉴图片仍是经过授权核验、由前端同源提供的公开本地静态资源。
 
 ### 快速开始
@@ -187,6 +187,7 @@ Fish_Book/
 
 - [本地开发与故障排查手册](docs/runbooks/local-development.md)
 - [OSS 私有照片接入](docs/runbooks/oss-private-media.md)：实现与云验收前置条件。
+- [管理员照片管理](docs/runbooks/admin-photo-management.md)：权限、版本协议、操作记录及独立本地验收证据。
 - [鱼类资料与图片来源记录](docs/data-sources/fish-catalog-attribution.md)
 - [FishBook MVP 设计规格](docs/superpowers/specs/2026-08-07-fishbook-mvp-design.md)
 - [鱼类图鉴核心设计规格](docs/superpowers/specs/2026-08-11-fish-catalog-core-design.md)
@@ -208,7 +209,7 @@ The catalog currently contains 12 curated freshwater species: crucian carp, comm
 
 ### Project Status
 
-The current product loop delivers identity, a public catalog, account-isolated private favorites, catch records with optional private photos, and administrator catalog maintenance. Photos are stored in a private MinIO bucket, and upload, retrieval, replacement, and removal all enforce record ownership; catalog writes are restricted to administrators.
+The current product loop delivers identity, a public catalog, account-isolated private favorites, catch records with optional private photos, and administrator catalog and photo management. Photos stay in a private MinIO bucket. Owner endpoints enforce record ownership; separate administrator endpoints allow viewing, replacing, and deleting user photos. Catalog writes are restricted to administrators.
 
 ### Current Features
 
@@ -241,7 +242,7 @@ The current product loop delivers identity, a public catalog, account-isolated p
 - Authenticated users can create, view, edit, and delete their own catch records, linked to an existing fish species with date, location, length, weight, method, and notes.
 - Catch lists and details are account-isolated; another user's record produces the same not-found state as a missing record.
 - Each record can optionally hold one JPEG, PNG, or WebP photo up to 10 MiB, which can be replaced or removed from the detail page.
-- Photos are retrieved only through an authenticated, owner-scoped backend endpoint; missing and foreign-owned photos return the same not-found result.
+- Authenticated owner endpoints return the same not-found result for missing and foreign-owned photos. Separate administrator endpoints allow photo management. Private photo responses use `Cache-Control: private, no-store`.
 - A photo upload failure during creation does not roll back the saved record, so the user can retry from its detail page.
 
 **Administrator catalog management**
@@ -249,7 +250,7 @@ The current product loop delivers identity, a public catalog, account-isolated p
 - An optional first-start bootstrap creates the local administrator; list, create, and edit routes are `/admin/fishes`, `/admin/fishes/new`, and `/admin/fishes/{id}/edit`.
 - Administrators can create drafts, edit content, publish, and unpublish fish. Draft and unpublished entries stay absent from public search and public detail pages.
 - `/api/v1/admin/**` enforces authentication, the administrator role, and CSRF. An ordinary user sees the local “没有管理员权限” page and receives `403` from the API.
-- Administrator work is limited to the public catalog and must never expose or mutate another user's private catches, favorites, or photos.
+- Administrators can also filter photos by owner ID, preview, confirm replacement/deletion, and read successful operation history at `/admin/photos`. Detailed catch fields and favorites remain private; no generic catch editing is granted. Photo writes require the observed revision and renewed confirmation after conflicts; old photos cannot be restored.
 
 Catalog cover upload, physical fish deletion, and complex RBAC remain out of scope. The catalog continues to use audited public images stored in the repository.
 
@@ -280,7 +281,7 @@ Browser
 - Spring Boot separates the identity, catalog, administration, favorites, and catchlog features across domain, application, persistence, and Web boundaries.
 - Flyway owns database schema and initial catalog-data migrations.
 - Spring Session stores authenticated sessions in MySQL.
-- MinIO stores private catch photos under user- and record-scoped keys. Browsers do not rely on public object URLs and retrieve photos only through the owner-authorized backend endpoint.
+- MinIO stores private catch photos under user- and record-scoped keys. Browsers retrieve photos through owner-authorized or separate administrator endpoints and receive no public or presigned object URLs.
 - Catalog images remain audited public static assets served locally by the frontend from the same origin.
 
 ### Quick Start

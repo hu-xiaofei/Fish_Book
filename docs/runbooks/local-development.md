@@ -36,9 +36,9 @@ After confirming the administrator exists, set `FISHBOOK_ADMIN_BOOTSTRAP_ENABLED
 
 确认管理员已经创建后，建议将 `FISHBOOK_ADMIN_BOOTSTRAP_ENABLED` 改为 `false` 并重启后端。已有管理员使用同一邮箱时初始化不会重复修改；同一邮箱若属于普通用户，启动会失败且不会自动提权，应先选择独立管理员邮箱或明确处理账号冲突。
 
-Production deployments must inject the email, nickname, and a unique strong password from deployment secret storage. Never place production secrets in a committed `.env` file. Catalog cover upload, physical fish deletion, and complex RBAC remain out of scope. Administrator work is restricted to public catalog content and must never expose or mutate another user's private catches, favorites, or photos.
+Production deployments must inject the email, nickname, and a unique strong password from deployment secret storage. Never place production secrets in a committed `.env` file. Catalog cover upload, physical fish deletion, and complex RBAC remain out of scope. Administrators can maintain public catalog content and manage photos through the separate `/admin/photos` interface. Detailed catch fields and favorites remain private; there is no generic administrator catch editing.
 
-生产部署必须通过部署平台的密钥存储注入管理员邮箱、昵称和独立强密码，绝不能在提交的 `.env` 中保存生产秘密。图鉴封面上传、鱼类物理删除和复杂 RBAC 仍不在当前范围内。管理员操作仅限公开图鉴，绝不能暴露或修改其他用户的私有钓获记录、收藏或照片。
+生产部署必须通过部署平台的密钥存储注入管理员邮箱、昵称和独立强密码，绝不能在提交的 `.env` 中保存生产秘密。图鉴封面上传、鱼类物理删除和复杂 RBAC 仍不在当前范围内。管理员可维护公开图鉴，通过“照片管理”查看、替换和删除用户照片；钓获详细字段与收藏仍私有，不提供通用管理员钓获修改。详见[管理员照片管理手册](admin-photo-management.md)。
 
 ## Normal Start and Stop
 
@@ -130,15 +130,17 @@ When the backend runs directly with the `local` profile, its default endpoint is
 
 At startup the backend checks for the configured bucket and creates it if absent. Keep that bucket private: do not add anonymous download policies or expose object URLs to the browser. If media is enabled but MinIO, its credentials, or bucket initialization is unavailable, backend startup fails instead of starting with an unusable media boundary.
 
-Each catch record accepts at most one JPEG, PNG, or WebP photo up to 10 MiB. All endpoints require an authenticated record owner:
+Each catch record accepts at most one JPEG, PNG, or WebP photo up to 10 MiB. The following owner endpoints require the authenticated record owner, including when an administrator calls them. Separate administrator routes are documented in [Administrator Photo Management](admin-photo-management.md).
 
 | Method and endpoint | Behavior |
 | --- | --- |
-| `PUT /api/v1/catches/{id}/photo` | Uploads or replaces multipart field `photo`; returns `204` |
-| `GET /api/v1/catches/{id}/photo` | Returns private binary content with `Cache-Control: private` |
-| `DELETE /api/v1/catches/{id}/photo` | Removes the current photo metadata; returns `204` |
+| `PUT /api/v1/catches/{id}/photo` | Uploads or replaces multipart field `photo` with quoted `If-Match`; returns `204` |
+| `GET /api/v1/catches/{id}/photo` | Returns binary content with `Cache-Control: private, no-store` and a strong revision ETag |
+| `DELETE /api/v1/catches/{id}/photo` | Removes the photo with quoted `If-Match`; retains the catch; returns `204` |
 
 A missing record, absent photo, and another user's photo all return the same `404` photo-not-found response. Invalid type, signature, or size returns `400`; a storage outage during a direct upload or read returns `503`. During record creation, a failed optional upload does not roll back the saved record, and the detail page offers a retry.
+
+Read the current string `revision` from catch detail or creation, then send `If-Match: "<revision>"` on every photo write with the normal Session and CSRF token. Missing preconditions return `428`, malformed values `400`, and stale versions `409`. A conflict refreshes the state and clears the previous choice; inspect the current photo and confirm a new operation. Never automatically fetch a newer revision and retry a write. V10 adds whole-record optimistic versions and administrator operation evidence; it has only been applied to disposable local test databases in this feature's acceptance, not RDS.
 
 ## Inspect Media Cleanup Safely
 
@@ -235,16 +237,13 @@ Use it only when disposable local data is understood and intentionally being dis
 
 ## Full Verification Sequence
 
-Copy `.env.example` once if `.env` is absent, start the complete stack without deleting its volumes, and run every layer in this order:
+Run backend and frontend checks, then follow the [isolated acceptance setup](admin-photo-management.md#独立本地验收) for browser tests. Browser tests create users, catches, and photos: never point them at an existing user-data stack. The administrator photo fixture deliberately fails without an explicit disposable project name.
 
 ```bash
-test -f .env || cp .env.example .env
-docker compose -f compose.yaml -f compose.full.yaml up -d --build
-
-cd backend && ./mvnw test
+cd backend && ./mvnw -B test && ./mvnw -B -DskipTests package
 cd ../frontend && npm ci && npm run lint && npm test && npm run build
-cd ../e2e && npm ci && npx playwright install chromium && npm test
-cd .. && docker compose -f compose.yaml -f compose.full.yaml config --quiet
+cd ../e2e && npm ci
+# Start the disposable stack and use its isolated Playwright config as documented.
 ```
 
-The Playwright acceptance suite proves registration, login, JDBC-backed session restoration after reload, nickname persistence, logout, protected-route redirection, the public catalog, the administrator draft/publish/unpublish visibility loop, ordinary-user UI and API denial, private favorites, catch-record CRUD, and private-photo upload, owner isolation, reload, replacement, and removal.
+The Playwright suite covers registration, login, JDBC-backed session restoration after reload, nickname persistence, logout, protected-route redirection, public catalog and administrator publishing, private favorites, catch CRUD, and owner photo operations. The administrator photo flow adds independent roles, cancel/confirm, a real owner/admin conflict, no automatic retry, no-store browser reads, account-switch content removal, and a trusted disposable database audit assertion. Actual current counts and limitations are recorded in the administrator photo runbook.
