@@ -259,6 +259,7 @@ test('changed optional-upload retry state is displayed and never silently upload
   expect(screen.getByText('照片或记录已被修改，请刷新后重新确认操作')).toBeInTheDocument();
   expect(putCatchPhotoMock).toHaveBeenCalledTimes(1);
   expect(screen.getByRole('button', { name: '确认上传照片' })).toBeEnabled();
+  expect(screen.getByRole('img', { name: '当前钓获照片' })).toHaveStyle({ maxWidth: '100%', height: 'auto' });
 });
 
 test('a retry confirmation closes when its reviewed revision changes in the cache', async () => {

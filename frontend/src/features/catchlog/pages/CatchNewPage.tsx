@@ -209,7 +209,7 @@ export function CatchNewPage() {
               <p>当前记录版本：{retryDetail.revision}；{retryDetail.hasPhoto ? '已有照片' : '暂无照片'}</p>
               <p>{retryDetail.commonNameZh} · {retryDetail.caughtOn} · {retryDetail.location}</p>
               {retryDetail.hasPhoto ? (
-                <img width={320} src={`${catchPhotoUrl(retryDetail.id)}?revision=${encodeURIComponent(retryDetail.revision)}`} alt="当前钓获照片" />
+                <img width={320} style={{ maxWidth: '100%', height: 'auto' }} src={`${catchPhotoUrl(retryDetail.id)}?revision=${encodeURIComponent(retryDetail.revision)}`} alt="当前钓获照片" />
               ) : null}
               {retryDetail.hasPhoto ? <p>确认后将替换当前照片。</p> : null}
               <button type="button" disabled={finishingUpload || reviewingRetry} onClick={() => {
