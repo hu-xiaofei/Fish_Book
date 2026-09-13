@@ -43,6 +43,9 @@ class HealthEndpointTest {
     AdminPhotoOperationRepository adminPhotoOperationRepository;
 
     @MockitoBean
+    com.fishbook.administration.photos.application.AdminPhotoQueryRepository adminPhotoQueryRepository;
+
+    @MockitoBean
     TransactionTemplate transactionTemplate;
 
     @Autowired

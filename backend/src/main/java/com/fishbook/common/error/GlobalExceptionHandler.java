@@ -1,6 +1,7 @@
 package com.fishbook.common.error;
 
 import com.fishbook.administration.application.InvalidAdminFishQueryException;
+import com.fishbook.administration.photos.application.InvalidAdminPhotoQueryException;
 import com.fishbook.catalog.application.InvalidCatalogQueryException;
 import com.fishbook.catalog.domain.FishNotFoundException;
 import com.fishbook.catalog.domain.InvalidFishSpeciesException;
@@ -8,6 +9,8 @@ import com.fishbook.catalog.domain.InvalidPublicationTransitionException;
 import com.fishbook.catchlog.application.InvalidCatchRecordQueryException;
 import com.fishbook.catchlog.application.CatchPhotoNotFoundException;
 import com.fishbook.catchlog.application.CatchPhotoConflictException;
+import com.fishbook.catchlog.application.InvalidPhotoVersionException;
+import com.fishbook.catchlog.application.PhotoVersionRequiredException;
 import com.fishbook.catchlog.domain.CatchRecordNotFoundException;
 import com.fishbook.catchlog.domain.InvalidCatchRecordException;
 import com.fishbook.favorites.application.InvalidFavoriteQueryException;
@@ -42,6 +45,20 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(PhotoVersionRequiredException.class)
+    ResponseEntity<ApiErrorResponse> handlePhotoVersionRequired(HttpServletRequest request) {
+        return error(HttpStatus.PRECONDITION_REQUIRED, "PHOTO_VERSION_REQUIRED", "请提供当前照片版本", List.of(), request);
+    }
+
+    @ExceptionHandler(InvalidPhotoVersionException.class)
+    ResponseEntity<ApiErrorResponse> handleInvalidPhotoVersion(HttpServletRequest request) {
+        return error(HttpStatus.BAD_REQUEST, "INVALID_PHOTO_VERSION", "照片版本无效", List.of(), request);
+    }
+
+    @ExceptionHandler(InvalidAdminPhotoQueryException.class)
+    ResponseEntity<ApiErrorResponse> handleInvalidAdminPhotoQuery(HttpServletRequest request) {
+        return error(HttpStatus.BAD_REQUEST, "INVALID_ADMIN_PHOTO_QUERY", "照片管理查询无效", List.of(), request);
+    }
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 

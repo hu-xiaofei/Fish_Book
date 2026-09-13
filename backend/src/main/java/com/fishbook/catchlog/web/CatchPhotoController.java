@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -33,12 +34,14 @@ public class CatchPhotoController {
     void put(
             Authentication authentication,
             @PathVariable String id,
+            @RequestHeader(value = "If-Match", required = false) String ifMatch,
             @RequestPart("photo") MultipartFile photo) throws IOException {
+        long version = PhotoRevision.parse(ifMatch);
         service.put(
                 authentication.getName(),
                 parseId(id),
                 photo.getBytes(),
-                photo.getContentType());
+                photo.getContentType(), version);
     }
 
     @GetMapping
@@ -50,14 +53,16 @@ public class CatchPhotoController {
                         HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.inline().build().toString())
                 .header("X-Content-Type-Options", "nosniff")
-                .header(HttpHeaders.CACHE_CONTROL, "private")
+                .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+                .eTag(photo.revision())
                 .body(photo.content());
     }
 
     @DeleteMapping
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void remove(Authentication authentication, @PathVariable String id) {
-        service.remove(authentication.getName(), parseId(id));
+    void remove(Authentication authentication, @PathVariable String id,
+            @RequestHeader(value = "If-Match", required = false) String ifMatch) {
+        service.remove(authentication.getName(), parseId(id), PhotoRevision.parse(ifMatch));
     }
 
     private static long parseId(String id) {

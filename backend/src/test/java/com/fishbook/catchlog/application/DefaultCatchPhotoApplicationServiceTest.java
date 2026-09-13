@@ -55,12 +55,14 @@ class DefaultCatchPhotoApplicationServiceTest {
                 mediaStore,
                 new MediaCleanupService(cleanupJobs, mediaStore, clock),
                 clock,
-                transactionTemplate());
+                transactionTemplate(),
+                org.mockito.Mockito.mock(com.fishbook.identity.domain.UserRepository.class),
+                org.mockito.Mockito.mock(com.fishbook.administration.photos.application.AdminPhotoOperationRepository.class));
     }
 
     @Test
     void storesValidatedBytesUnderAnOwnerScopedOpaqueKeyAndPersistsOnlyTheKey() {
-        service.put("angler@example.com", 31L, JPEG, "image/jpeg");
+        service.put("angler@example.com", 31L, JPEG, "image/jpeg", 0);
 
         assertThat(mediaStore.putKeys).singleElement()
                 .asString()
@@ -74,7 +76,7 @@ class DefaultCatchPhotoApplicationServiceTest {
     @Test
     void rejectsInvalidContentBeforeWritingToStorageOrTheDatabase() {
         assertThatThrownBy(() -> service.put(
-                "angler@example.com", 31L, new byte[] {'G', 'I', 'F'}, "image/gif"))
+                "angler@example.com", 31L, new byte[] {'G', 'I', 'F'}, "image/gif", 0))
                 .isInstanceOf(com.fishbook.media.application.InvalidCatchPhotoException.class);
 
         assertThat(mediaStore.putKeys).isEmpty();
@@ -85,7 +87,7 @@ class DefaultCatchPhotoApplicationServiceTest {
     void replacingAPhotoSwapsTheReferenceAndEnqueuesTheOldObject() {
         records.current = record("catches/41/31/old");
 
-        service.put("angler@example.com", 31L, JPEG, "image/jpeg");
+        service.put("angler@example.com", 31L, JPEG, "image/jpeg", 0);
 
         assertThat(records.current.photoObjectKey()).isNotEqualTo("catches/41/31/old");
         assertThat(cleanupJobs.enqueued).singleElement().satisfies(job -> {
@@ -111,8 +113,8 @@ class DefaultCatchPhotoApplicationServiceTest {
     void removalClearsTheReferenceAndEnqueuesCleanupButNoPhotoIsIdempotent() {
         records.current = record("catches/41/31/current");
 
-        service.remove("angler@example.com", 31L);
-        service.remove("angler@example.com", 31L);
+        service.remove("angler@example.com", 31L, 0);
+        service.remove("angler@example.com", 31L, 1);
 
         assertThat(records.current.photoObjectKey()).isNull();
         assertThat(records.current.updatedAt()).isEqualTo(NOW);
@@ -126,11 +128,11 @@ class DefaultCatchPhotoApplicationServiceTest {
     void missingOrForeignRecordsUsePhotoNotFoundWithoutCallingStorage() {
         records.visible = false;
 
-        assertThatThrownBy(() -> service.put("angler@example.com", 31L, JPEG, "image/jpeg"))
+        assertThatThrownBy(() -> service.put("angler@example.com", 31L, JPEG, "image/jpeg", 0))
                 .isInstanceOf(CatchPhotoNotFoundException.class);
         assertThatThrownBy(() -> service.get("angler@example.com", 31L))
                 .isInstanceOf(CatchPhotoNotFoundException.class);
-        assertThatThrownBy(() -> service.remove("angler@example.com", 31L))
+        assertThatThrownBy(() -> service.remove("angler@example.com", 31L, 0))
                 .isInstanceOf(CatchPhotoNotFoundException.class);
 
         assertThat(mediaStore.putKeys).isEmpty();
@@ -143,7 +145,7 @@ class DefaultCatchPhotoApplicationServiceTest {
         records.current = record("catches/41/31/old");
         records.failSave = true;
 
-        assertThatThrownBy(() -> service.put("angler@example.com", 31L, JPEG, "image/jpeg"))
+        assertThatThrownBy(() -> service.put("angler@example.com", 31L, JPEG, "image/jpeg", 0))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("database unavailable");
 
@@ -157,12 +159,13 @@ class DefaultCatchPhotoApplicationServiceTest {
         records.current = record("catches/41/31/old");
         mediaStore.failPut = true;
 
-        assertThatThrownBy(() -> service.put("angler@example.com", 31L, JPEG, "image/jpeg"))
+        assertThatThrownBy(() -> service.put("angler@example.com", 31L, JPEG, "image/jpeg", 0))
                 .isInstanceOf(MediaStorageUnavailableException.class);
 
         assertThat(records.current.photoObjectKey()).isEqualTo("catches/41/31/old");
         assertThat(records.saveCount).isZero();
         assertThat(cleanupJobs.enqueued).isEmpty();
+        assertThat(mediaStore.deletedKeys).containsExactly(mediaStore.putKeys.getFirst());
     }
 
     private static CatchRecord record(String photoObjectKey) {
@@ -225,8 +228,9 @@ class DefaultCatchPhotoApplicationServiceTest {
                 throw new IllegalStateException("database unavailable");
             }
             saveCount++;
-            current = record;
-            return record;
+            current = CatchRecord.restore(record.id(), record.userId(), record.details(), record.photoObjectKey(),
+                    record.createdAt(), record.updatedAt(), record.version() + 1);
+            return current;
         }
 
         @Override

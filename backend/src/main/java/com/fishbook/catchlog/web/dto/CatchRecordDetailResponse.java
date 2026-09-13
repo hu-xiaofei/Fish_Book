@@ -16,6 +16,7 @@ public record CatchRecordDetailResponse(
         String method,
         String notes,
         boolean hasPhoto,
+        String revision,
         Instant createdAt,
         Instant updatedAt) {
 
@@ -23,6 +24,6 @@ public record CatchRecordDetailResponse(
         return new CatchRecordDetailResponse(
                 view.id(), view.fishSlug(), view.commonNameZh(), view.caughtOn(), view.location(),
                 view.lengthCm(), view.weightG(), view.method(), view.notes(), view.hasPhoto(),
-                view.createdAt(), view.updatedAt());
+                view.revision(), view.createdAt(), view.updatedAt());
     }
 }

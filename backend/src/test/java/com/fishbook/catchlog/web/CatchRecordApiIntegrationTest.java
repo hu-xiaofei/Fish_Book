@@ -70,6 +70,7 @@ class CatchRecordApiIntegrationTest {
                                  "method":"路亚","notes":"傍晚近岸中鱼"}
                                 """))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.revision").value("0"))
                 .andExpect(header().string("Location", matchesPattern("/api/v1/catches/\\d+")))
                 .andExpect(jsonPath("$.id").isNumber())
                 .andExpect(jsonPath("$.fishSlug").value("channa-argus"))
@@ -116,6 +117,7 @@ class CatchRecordApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(id))
                 .andExpect(jsonPath("$.notes").value("seed notes"))
+                .andExpect(jsonPath("$.revision").value("0"))
                 .andExpect(jsonPath("$.photoObjectKey").doesNotExist());
 
         mvc.perform(put("/api/v1/catches/{id}", id)
@@ -131,6 +133,7 @@ class CatchRecordApiIntegrationTest {
                 .andExpect(jsonPath("$.fishSlug").value("cyprinus-carpio"))
                 .andExpect(jsonPath("$.caughtOn").value("2026-08-19"))
                 .andExpect(jsonPath("$.location").value("New location"))
+                .andExpect(jsonPath("$.revision").value("1"))
                 .andExpect(jsonPath("$.lengthCm").value(0))
                 .andExpect(jsonPath("$.weightG").value(0))
                 .andExpect(jsonPath("$.method").doesNotExist())

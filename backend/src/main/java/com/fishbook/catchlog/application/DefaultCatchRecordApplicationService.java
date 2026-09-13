@@ -186,7 +186,7 @@ public class DefaultCatchRecordApplicationService implements CatchRecordApplicat
         return new CatchRecordDetailView(
                 requiredId(record), fish.slug(), fish.commonNameZh(), details.caughtOn(), details.location(),
                 details.lengthCm(), details.weightG(), details.method(), details.notes(),
-                record.photoObjectKey() != null, record.createdAt(), record.updatedAt());
+                record.photoObjectKey() != null, Long.toString(record.version()), record.createdAt(), record.updatedAt());
     }
 
     private long requiredId(CatchRecord record) {

@@ -15,6 +15,7 @@ public record CatchRecordDetailView(
         String method,
         String notes,
         boolean hasPhoto,
+        String revision,
         Instant createdAt,
         Instant updatedAt) {
 }

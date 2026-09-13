@@ -86,7 +86,7 @@ class CatchPhotoApiIntegrationTest {
             mvc.perform(multipart(HttpMethod.PUT, "/api/v1/catches/{id}/photo", id)
                             .file(new MockMultipartFile(
                                     "photo", fixture.filename(), fixture.contentType(), fixture.content()))
-                            .with(user(USER_EMAIL)).with(csrf()))
+                            .header("If-Match", "\"0\"").with(user(USER_EMAIL)).with(csrf()))
                     .andExpect(status().isNoContent());
 
             String objectKey = jdbcTemplate.queryForObject(
@@ -108,7 +108,7 @@ class CatchPhotoApiIntegrationTest {
                 .andExpect(content().contentType("image/jpeg"))
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, "inline"))
                 .andExpect(header().string("X-Content-Type-Options", "nosniff"))
-                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "private"))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "private, no-store"))
                 .andExpect(header().doesNotExist("X-Object-Key"));
     }
 
@@ -117,7 +117,7 @@ class CatchPhotoApiIntegrationTest {
         long id = insertCatch(USER_ID, null);
 
         mvc.perform(multipart(HttpMethod.PUT, "/api/v1/catches/{id}/photo", id)
-                        .with(user(USER_EMAIL)).with(csrf()))
+                        .header("If-Match", "\"0\"").with(user(USER_EMAIL)).with(csrf()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_CATCH_PHOTO"));
         assertInvalid(id, new MockMultipartFile("photo", "empty.jpg", "image/jpeg", new byte[0]));
@@ -155,10 +155,10 @@ class CatchPhotoApiIntegrationTest {
         long id = insertCatch(USER_ID, "catches/9601/remove/private");
 
         mvc.perform(delete("/api/v1/catches/{id}/photo", id)
-                        .with(user(USER_EMAIL)).with(csrf()))
+                        .header("If-Match", "\"0\"").with(user(USER_EMAIL)).with(csrf()))
                 .andExpect(status().isNoContent());
         mvc.perform(delete("/api/v1/catches/{id}/photo", id)
-                        .with(user(USER_EMAIL)).with(csrf()))
+                        .header("If-Match", "\"1\"").with(user(USER_EMAIL)).with(csrf()))
                 .andExpect(status().isNoContent());
 
         assertThat(jdbcTemplate.queryForObject(
@@ -191,7 +191,7 @@ class CatchPhotoApiIntegrationTest {
 
         mvc.perform(multipart(HttpMethod.PUT, "/api/v1/catches/{id}/photo", uploadId)
                         .file(new MockMultipartFile("photo", "photo.jpg", "image/jpeg", JPEG))
-                        .with(user(USER_EMAIL)).with(csrf()))
+                        .header("If-Match", "\"0\"").with(user(USER_EMAIL)).with(csrf()))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("MEDIA_STORAGE_UNAVAILABLE"));
 
@@ -222,7 +222,7 @@ class CatchPhotoApiIntegrationTest {
 
     private void assertInvalid(long id, MockMultipartFile photo) throws Exception {
         mvc.perform(multipart(HttpMethod.PUT, "/api/v1/catches/{id}/photo", id)
-                        .file(photo).with(user(USER_EMAIL)).with(csrf()))
+                        .file(photo).header("If-Match", "\"0\"").with(user(USER_EMAIL)).with(csrf()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_CATCH_PHOTO"));
     }
