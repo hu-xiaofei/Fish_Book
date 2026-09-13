@@ -246,7 +246,7 @@ function OwnerPhotoPanel({
           <div className={styles.actions}>
             <button
               type="button"
-              disabled={removeMutation.isPending}
+              disabled={busy}
               onClick={() => removeMutation.mutate(confirmingRemove)}
             >
               {removeMutation.isPending ? '移除中…' : '确认移除'}

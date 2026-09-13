@@ -221,6 +221,41 @@ test('another write stays disabled until actual current detail is fetched after 
   expect(screen.getByRole('img')).toHaveAttribute('src', '/api/v1/catches/31/photo?revision=8&reload=0');
 });
 
+test('an open removal confirmation cannot send DELETE during a pending replacement upload', async () => {
+  const uploading = deferred<void>();
+  putCatchPhotoMock.mockReturnValue(uploading.promise);
+  const { user } = renderPanel(true);
+  await user.upload(screen.getByLabelText('钓获照片'), new File(['jpeg'], 'replacement.jpg', { type: 'image/jpeg' }));
+  await user.click(screen.getByRole('button', { name: '移除照片' }));
+  await user.click(screen.getByRole('button', { name: '替换照片' }));
+  const confirmation = screen.getByRole('button', { name: '确认移除' });
+  await user.click(confirmation);
+
+  expect(removeCatchPhotoMock).not.toHaveBeenCalled();
+  expect(confirmation).toBeDisabled();
+  uploading.resolve();
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+});
+
+test('an open removal confirmation cannot send DELETE during replacement success metadata refresh', async () => {
+  const refreshing = deferred<CatchRecordDetail>();
+  putCatchPhotoMock.mockResolvedValue(undefined);
+  fetchCatchRecordMock.mockReturnValue(refreshing.promise);
+  const { user } = renderPanel(true);
+  await user.upload(screen.getByLabelText('钓获照片'), new File(['jpeg'], 'replacement.jpg', { type: 'image/jpeg' }));
+  await user.click(screen.getByRole('button', { name: '移除照片' }));
+  await user.click(screen.getByRole('button', { name: '替换照片' }));
+  await waitFor(() => expect(fetchCatchRecordMock).toHaveBeenCalledWith(31));
+  const confirmation = screen.getByRole('button', { name: '确认移除' });
+  await user.click(confirmation);
+
+  expect(removeCatchPhotoMock).not.toHaveBeenCalled();
+  expect(confirmation).toBeDisabled();
+  refreshing.resolve(queryDetail());
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+  expect(screen.getByRole('button', { name: '移除照片' })).toBeEnabled();
+});
+
 test('late success metadata never restores private cache after a session change', async () => {
   const refreshing = deferred<CatchRecordDetail>();
   putCatchPhotoMock.mockResolvedValue(undefined);
