@@ -13,9 +13,13 @@ import { CatchEditPage } from '../features/catchlog/pages/CatchEditPage';
 import { AdminFishListPage } from '../features/administration/pages/AdminFishListPage';
 import { AdminFishNewPage } from '../features/administration/pages/AdminFishNewPage';
 import { AdminFishEditPage } from '../features/administration/pages/AdminFishEditPage';
+import { AdminPhotoListPage } from '../features/administration/photos/pages/AdminPhotoListPage';
+import { AdminPhotoDetailPage } from '../features/administration/photos/pages/AdminPhotoDetailPage';
 import { App } from './App';
 
 export const router = createBrowserRouter([
+  { path: '/admin/photos', element: <AdminRoute><AdminPhotoListPage /></AdminRoute> },
+  { path: '/admin/photos/:id', element: <AdminRoute><AdminPhotoDetailPage /></AdminRoute> },
   {
     path: '/',
     element: <App />,

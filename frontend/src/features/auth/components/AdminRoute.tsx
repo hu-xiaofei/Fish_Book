@@ -42,7 +42,7 @@ export function AdminRoute({ children }: AdminRouteProps) {
     return (
       <main>
         <h1>没有管理员权限</h1>
-        <p>此页面仅供管理员维护鱼类图鉴。</p>
+        <p>此页面仅供管理员进行后台管理。</p>
         <Link to="/">返回首页</Link>
       </main>
     );

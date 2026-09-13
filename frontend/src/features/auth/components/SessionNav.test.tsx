@@ -103,6 +103,7 @@ test('authenticated navigation includes personal favorites and catch records', (
   expect(screen.getByRole('link', { name: '我的收藏' })).toHaveAttribute('href', '/favorites');
   expect(screen.getByRole('link', { name: '钓获记录' })).toHaveAttribute('href', '/catches');
   expect(screen.queryByRole('link', { name: '图鉴管理' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: '照片管理' })).not.toBeInTheDocument();
 });
 
 test('administrator navigation includes management and existing user links', () => {
@@ -112,6 +113,7 @@ test('administrator navigation includes management and existing user links', () 
   expect(screen.getByRole('link', { name: '我的收藏' })).toHaveAttribute('href', '/favorites');
   expect(screen.getByRole('link', { name: '钓获记录' })).toHaveAttribute('href', '/catches');
   expect(screen.getByRole('link', { name: '图鉴管理' })).toHaveAttribute('href', '/admin/fishes');
+  expect(screen.getByRole('link', { name: '照片管理' })).toHaveAttribute('href', '/admin/photos');
 });
 
 test('successful logout removes all private record queries before current-user data', async () => {
@@ -124,6 +126,9 @@ test('successful logout removes all private record queries before current-user d
   }));
   seedUserFavorites(queryClient);
   seedUserCatches(queryClient);
+  queryClient.setQueryData(['admin-photos', 'page', '', 0], { items: [{ recordId: 31 }] });
+  queryClient.setQueryData(['admin-photos', 'detail', 31], { ownerNickname: '私有数据' });
+  queryClient.setQueryData(['admin-photos', 'operations', 31, 0], { items: [{ actorUserId: 2 }] });
   let exposedPrivateDataWithoutAUser = false;
   const unsubscribe = queryClient.getQueryCache().subscribe(() => {
     const currentUser = queryClient.getQueryData(CURRENT_USER_QUERY_KEY);
@@ -145,6 +150,7 @@ test('successful logout removes all private record queries before current-user d
   expect(queryClient.getQueryData(CURRENT_USER_QUERY_KEY)).toBeUndefined();
   expect(queryClient.getQueriesData({ queryKey: FAVORITES_QUERY_KEY })).toEqual([]);
   expect(queryClient.getQueriesData({ queryKey: ['catches'] })).toEqual([]);
+  expect(queryClient.getQueriesData({ queryKey: ['admin-photos'] })).toEqual([]);
   expect(exposedPrivateDataWithoutAUser).toBe(false);
 });
 

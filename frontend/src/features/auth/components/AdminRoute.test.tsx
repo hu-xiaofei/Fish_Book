@@ -95,6 +95,7 @@ test('ordinary user sees a local forbidden page without rendering children', asy
   expect(await screen.findByRole('heading', { name: '没有管理员权限' })).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: '管理内容' })).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: '返回首页' })).toHaveAttribute('href', '/');
+  expect(screen.getByText('此页面仅供管理员进行后台管理。')).toBeInTheDocument();
 });
 
 test('administrator route waits for session lookup before making an access decision', async () => {

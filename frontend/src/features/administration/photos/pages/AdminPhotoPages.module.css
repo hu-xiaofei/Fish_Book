@@ -1,0 +1,22 @@
+.page { box-sizing: border-box; width: min(100%, 76rem); margin: 0 auto; padding: 1.5rem; color: #17302a; }
+.header { display: flex; align-items: start; justify-content: space-between; gap: 1.5rem; margin-bottom: 1.5rem; padding-bottom: 1.25rem; border-bottom: 1px solid #c9d9d1; }
+.header h1, .header p { margin: 0; }
+.header p { margin-top: .4rem; color: #587068; }
+.navigation, .navigation nav { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem; }
+.controls, .message { display: grid; gap: .75rem; margin: 1.5rem 0; padding: 1rem; border-radius: .75rem; background: #f4faf7; }
+.message { border-left: .25rem solid #3f8f75; }
+.controls form { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.page button, .page input { box-sizing: border-box; min-height: 2.75rem; padding: .6rem .75rem; border: 1px solid #89a79b; border-radius: .4rem; background: #fff; font: inherit; }
+.page button, .page a { color: #075f4b; font-weight: 600; }
+.page button:disabled { opacity: .55; }
+.page a:focus-visible, .page button:focus-visible, .page input:focus-visible { outline: 3px solid #e4a11b; outline-offset: 3px; }
+.tableWrapper { overflow-x: auto; border: 1px solid #c9d9d1; border-radius: .75rem; }
+.tableWrapper table { width: 100%; min-width: 42rem; border-collapse: collapse; }
+.tableWrapper caption { padding: 1rem; text-align: left; font-weight: 700; }
+.tableWrapper th, .tableWrapper td { padding: .85rem 1rem; border-top: 1px solid #e2ebe6; text-align: left; }
+.tableWrapper thead th { background: #edf5f1; }
+.photo { display: block; width: auto; max-width: 100%; max-height: 36rem; object-fit: contain; border-radius: .5rem; }
+.message dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 0; }
+.message dt { color: #587068; }
+.message dd { margin: .25rem 0 0; }
+@media (max-width: 40rem) { .page { padding: 1rem; } .header { display: grid; } .message dl { grid-template-columns: 1fr; } }

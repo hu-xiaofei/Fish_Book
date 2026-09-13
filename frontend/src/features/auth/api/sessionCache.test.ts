@@ -16,6 +16,9 @@ test('a confirmed session expiry removes private and administrator data before r
     { items: [{ id: 99, commonNameZh: '不应保留的草稿' }] },
   );
   queryClient.setQueryData(adminFishDetailQueryKey(99), { id: 99, status: 'DRAFT' });
+  queryClient.setQueryData(['admin-photos', 'page', '41', 0], { items: [{ recordId: 31 }] });
+  queryClient.setQueryData(['admin-photos', 'detail', 31], { ownerNickname: '私有照片' });
+  queryClient.setQueryData(['admin-photos', 'operations', 31, 0], { items: [{ actorUserId: 2 }] });
   let exposedPrivateDataWithoutAUser = false;
   const unsubscribe = queryClient.getQueryCache().subscribe(() => {
     const user = queryClient.getQueryData(CURRENT_USER_QUERY_KEY);
@@ -23,7 +26,9 @@ test('a confirmed session expiry removes private and administrator data before r
       .some(([, data]) => data !== undefined);
     const hasAdminData = queryClient.getQueriesData({ queryKey: ['admin-fishes'] })
       .some(([, data]) => data !== undefined);
-    if (user === undefined && (hasCatchData || hasAdminData)) exposedPrivateDataWithoutAUser = true;
+    const hasPhotoData = queryClient.getQueriesData({ queryKey: ['admin-photos'] })
+      .some(([, data]) => data !== undefined);
+    if (user === undefined && (hasCatchData || hasAdminData || hasPhotoData)) exposedPrivateDataWithoutAUser = true;
   });
 
   const handled = expireSessionOnUnauthorized(queryClient, new ApiError(401, {
@@ -37,5 +42,6 @@ test('a confirmed session expiry removes private and administrator data before r
   expect(handled).toBe(true);
   expect(queryClient.getQueriesData({ queryKey: ['catches'] })).toEqual([]);
   expect(queryClient.getQueriesData({ queryKey: ['admin-fishes'] })).toEqual([]);
+  expect(queryClient.getQueriesData({ queryKey: ['admin-photos'] })).toEqual([]);
   expect(exposedPrivateDataWithoutAUser).toBe(false);
 });
