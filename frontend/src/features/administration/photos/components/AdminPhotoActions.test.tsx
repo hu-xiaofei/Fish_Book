@@ -158,7 +158,7 @@ test('409 resets reviewed choice, refreshes metadata, and never retries a mutati
 
 test('successful writes refresh real detail and invalidate lists/history and owner caches', async () => {
   const { user, queryClient } = renderActions();
-  for (const key of [['admin-photos', 'detail', 31], ['admin-photos', 'page', '', 0], ['admin-photos', 'operations', 31, 0], ['catches', 'detail', 31], ['catches', 'page', 0]]) queryClient.setQueryData(key, { private: true });
+  for (const key of [['admin-photos', 'detail', 31], ['admin-photos', 'page', '', 0], ['admin-photos', 'operations', 31, 0], ['catches', 'detail', 31], ['catches', 'page', 0]]) queryClient.setQueryData(key, key[0] === 'admin-photos' && key[1] === 'detail' ? photo : { private: true });
   await user.click(screen.getByRole('button', { name: '删除照片' }));
   await user.click(screen.getByRole('button', { name: '确认删除' }));
   await waitFor(() => expect(queryClient.getQueryData(['admin-photos', 'detail', 31])).toMatchObject({ revision: '8' }));
@@ -181,7 +181,7 @@ test('successful write after target switch invalidates old caches without refill
   const write = deferred<void>();
   vi.mocked(replaceAdminPhoto).mockReturnValue(write.promise);
   const { user, rerender, queryClient } = renderActions();
-  for (const key of [['admin-photos', 'detail', 31], ['admin-photos', 'page', '', 0], ['admin-photos', 'operations', 31, 0], ['catches', 'detail', 31]]) queryClient.setQueryData(key, { private: true });
+  for (const key of [['admin-photos', 'detail', 31], ['admin-photos', 'page', '', 0], ['admin-photos', 'operations', 31, 0], ['catches', 'detail', 31]]) queryClient.setQueryData(key, key[0] === 'admin-photos' && key[1] === 'detail' ? photo : { private: true });
   await user.upload(screen.getByLabelText('新照片'), file);
   await user.click(screen.getByRole('button', { name: '替换照片' }));
   await user.click(screen.getByRole('button', { name: '确认替换' }));

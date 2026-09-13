@@ -6,6 +6,7 @@ import { CATCH_PHOTO_ACCEPT, validateCatchPhotoFile } from '../../../catchlog/ap
 import { CATCHES_QUERY_KEY } from '../../../catchlog/api/catchRecordsApi';
 import { ADMIN_PHOTOS_QUERY_KEY, adminPhotoDetailQueryKey, fetchAdminPhoto, removeAdminPhoto, replaceAdminPhoto } from '../api/adminPhotoApi';
 import { isAdminPhotoAccessError, useAdminPhotoSession } from '../model/useAdminPhotoAccess';
+import type { AdminPhotoSummary } from '../model/types';
 import styles from '../pages/AdminPhotoPages.module.css';
 
 type Props = { recordId: number; revision: string; onAccessError: (error: unknown) => void };
@@ -58,12 +59,22 @@ function Actions({ recordId, revision, onAccessError }: Props) {
       // A committed write must invalidate consumers even if this read fails.
       await invalidateRelated();
       if (!current(generation)) return;
+      await queryClient.cancelQueries({ queryKey: adminPhotoDetailQueryKey(target.id), exact: true });
+      if (!current(generation)) return;
       const detail = await fetchAdminPhoto(target.id);
       if (!current(generation)) return;
-      queryClient.setQueryData(adminPhotoDetailQueryKey(target.id), detail);
+      // Also cancel a focus/reconnect read that started during the direct read.
+      await queryClient.cancelQueries({ queryKey: adminPhotoDetailQueryKey(target.id), exact: true });
+      if (!current(generation)) return;
+      queryClient.setQueryData<AdminPhotoSummary>(adminPhotoDetailQueryKey(target.id), (cached) => (
+        cached && BigInt(cached.revision) > BigInt(detail.revision) ? cached : detail
+      ));
       setRefreshNeeded(false);
     } catch (error) {
       if (!current(generation) || handleAccessError(error)) return;
+      if (error instanceof ApiError && error.status === 404) {
+        clearChoice(); setBlocked(true); onAccessError(error); return;
+      }
       setActionError((message) => message ?? '刷新照片状态失败，请刷新后再操作');
     } finally { if (current(generation)) setRefreshing(false); }
   };

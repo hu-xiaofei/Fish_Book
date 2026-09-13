@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { Link } from 'react-router-dom';
 import { clearSessionScopedQueries } from '../../../auth/api/sessionCache';
 import { deferred } from '../../../../test/renderWithProviders';
-import { fetchAdminPhoto, fetchAdminPhotoOperations, removeAdminPhoto } from '../api/adminPhotoApi';
+import { adminPhotoDetailQueryKey, fetchAdminPhoto, fetchAdminPhotoOperations, removeAdminPhoto } from '../api/adminPhotoApi';
 import { apiError, photo, renderAdmin } from '../test/helpers';
 import { AdminPhotoDetailPage } from './AdminPhotoDetailPage';
 
@@ -117,6 +117,115 @@ test('successful delete uses actual refreshed no-photo state and independently r
   expect(screen.getByText('9')).toBeVisible();
   expect(screen.queryByRole('img')).not.toBeInTheDocument();
   await waitFor(() => expect(fetchAdminPhotoOperations).toHaveBeenCalledTimes(2));
+});
+
+test.each(['before-write', 'during-refresh'])('delete refresh cannot be overwritten by a delayed background detail read started %s', async (timing) => {
+  const oldRead = deferred<typeof photo>();
+  const actualRead = deferred<typeof photo>();
+  vi.mocked(fetchAdminPhoto).mockResolvedValueOnce(photo);
+  if (timing === 'before-write') vi.mocked(fetchAdminPhoto).mockReturnValueOnce(oldRead.promise).mockReturnValueOnce(actualRead.promise);
+  else vi.mocked(fetchAdminPhoto).mockReturnValueOnce(actualRead.promise).mockReturnValueOnce(oldRead.promise);
+  const { user, queryClient } = renderAdmin(<AdminPhotoDetailPage />, '/admin/photos/31', '/admin/photos/:id');
+  await screen.findByRole('img');
+  let backgroundRead = Promise.resolve();
+  if (timing === 'before-write') {
+    backgroundRead = queryClient.refetchQueries({ queryKey: adminPhotoDetailQueryKey(31), exact: true });
+    await waitFor(() => expect(fetchAdminPhoto).toHaveBeenCalledTimes(2));
+  }
+  await user.click(screen.getByRole('button', { name: '删除照片' }));
+  await user.click(screen.getByRole('button', { name: '确认删除' }));
+  if (timing === 'during-refresh') {
+    await waitFor(() => expect(fetchAdminPhoto).toHaveBeenCalledTimes(2));
+    backgroundRead = queryClient.refetchQueries({ queryKey: adminPhotoDetailQueryKey(31), exact: true });
+  }
+  await waitFor(() => expect(fetchAdminPhoto).toHaveBeenCalledTimes(3));
+  await act(async () => { actualRead.resolve({ ...photo, hasPhoto: false, revision: '8' }); });
+  expect(await screen.findByText('暂无照片')).toBeVisible();
+  await act(async () => { oldRead.resolve(photo); await backgroundRead; });
+  expect(queryClient.getQueryData(adminPhotoDetailQueryKey(31))).toMatchObject({ hasPhoto: false, revision: '8' });
+  expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '删除照片' })).not.toBeInTheDocument();
+});
+
+test('image authority metadata refresh cannot be overwritten by a preexisting delayed background detail read', async () => {
+  const oldRead = deferred<typeof photo>();
+  vi.mocked(fetchAdminPhoto).mockResolvedValueOnce(photo).mockReturnValueOnce(oldRead.promise).mockResolvedValue({ ...photo, hasPhoto: false, revision: '8' });
+  const { queryClient } = renderAdmin(<AdminPhotoDetailPage />, '/admin/photos/31', '/admin/photos/:id');
+  const original = await screen.findByRole('img');
+  const backgroundRead = queryClient.refetchQueries({ queryKey: adminPhotoDetailQueryKey(31), exact: true });
+  await waitFor(() => expect(fetchAdminPhoto).toHaveBeenCalledTimes(2));
+  fireEvent.error(original);
+  expect(await screen.findByText('暂无照片')).toBeVisible();
+  await act(async () => { oldRead.resolve(photo); await backgroundRead; });
+  expect(queryClient.getQueryData(adminPhotoDetailQueryKey(31))).toMatchObject({ hasPhoto: false, revision: '8' });
+  expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '删除照片' })).not.toBeInTheDocument();
+});
+
+test('a completed newer background revision is not replaced by an older delayed actual-state read', async () => {
+  const actualRead = deferred<typeof photo>();
+  vi.mocked(fetchAdminPhoto).mockResolvedValueOnce(photo).mockReturnValueOnce(actualRead.promise).mockResolvedValue({ ...photo, hasPhoto: true, revision: '9007199254740993' });
+  const { user, queryClient } = renderAdmin(<AdminPhotoDetailPage />, '/admin/photos/31', '/admin/photos/:id');
+  await screen.findByRole('img');
+  await user.click(screen.getByRole('button', { name: '删除照片' }));
+  await user.click(screen.getByRole('button', { name: '确认删除' }));
+  await waitFor(() => expect(fetchAdminPhoto).toHaveBeenCalledTimes(2));
+  await act(async () => { await queryClient.refetchQueries({ queryKey: adminPhotoDetailQueryKey(31), exact: true }); });
+  expect(await screen.findByText('9007199254740993')).toBeVisible();
+  await act(async () => { actualRead.resolve({ ...photo, hasPhoto: false, revision: '9007199254740992' }); });
+  expect(queryClient.getQueryData(adminPhotoDetailQueryKey(31))).toMatchObject({ hasPhoto: true, revision: '9007199254740993' });
+  expect(screen.getByRole('img')).toHaveAttribute('src', '/api/v1/admin/photos/31/content?revision=9007199254740993&reload=0');
+  expect(screen.getByRole('button', { name: '删除照片' })).toBeEnabled();
+});
+
+test.each([403, 404])('a newer cached revision cannot hide actual-state read failure %s', async (status) => {
+  const actualRead = deferred<typeof photo>();
+  vi.mocked(fetchAdminPhoto).mockResolvedValueOnce(photo).mockReturnValueOnce(actualRead.promise).mockResolvedValue({ ...photo, revision: '9' });
+  const { user, queryClient } = renderAdmin(<AdminPhotoDetailPage />, '/admin/photos/31', '/admin/photos/:id');
+  await screen.findByRole('img');
+  await user.click(screen.getByRole('button', { name: '删除照片' }));
+  await user.click(screen.getByRole('button', { name: '确认删除' }));
+  await waitFor(() => expect(fetchAdminPhoto).toHaveBeenCalledTimes(2));
+  await act(async () => { await queryClient.refetchQueries({ queryKey: adminPhotoDetailQueryKey(31), exact: true }); });
+  expect(await screen.findByText('9')).toBeVisible();
+  await act(async () => { actualRead.reject(apiError(status)); });
+  expect(await screen.findByRole('heading', { name: status === 403 ? '没有管理员权限' : '没有找到钓获记录' })).toBeVisible();
+  expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '删除照片' })).not.toBeInTheDocument();
+  expect(queryClient.getQueryData(adminPhotoDetailQueryKey(31))).toBeUndefined();
+});
+
+test('session change during awaited detail cancellation prevents starting the old-session actual-state read', async () => {
+  const cancellation = deferred<void>();
+  const { user, queryClient } = renderAdmin(<AdminPhotoDetailPage />, '/admin/photos/31', '/admin/photos/:id');
+  await screen.findByRole('img');
+  const cancel = queryClient.cancelQueries.bind(queryClient);
+  const cancelSpy = vi.spyOn(queryClient, 'cancelQueries').mockImplementation(async (...args) => { await cancel(...args); await cancellation.promise; });
+  await user.click(screen.getByRole('button', { name: '删除照片' }));
+  await user.click(screen.getByRole('button', { name: '确认删除' }));
+  await waitFor(() => expect(cancelSpy).toHaveBeenCalledWith({ queryKey: ['admin-photos', 'detail', 31], exact: true }));
+  act(() => clearSessionScopedQueries(queryClient));
+  await act(async () => { cancellation.resolve(undefined); });
+  expect(await screen.findByRole('heading', { name: '登录页' })).toBeVisible();
+  expect(fetchAdminPhoto).toHaveBeenCalledTimes(1);
+  expect(queryClient.getQueriesData({ queryKey: ['admin-photos'] })).toEqual([]);
+});
+
+test('target switch during awaited authority cancellation prevents reading or modifying the previous target', async () => {
+  const cancellation = deferred<void>();
+  vi.mocked(fetchAdminPhoto).mockResolvedValueOnce(photo).mockResolvedValue({ ...photo, recordId: 32, ownerNickname: '另一位钓友' });
+  const { user, queryClient } = renderAdmin(<><AdminPhotoDetailPage /><Link to="/admin/photos/32">切换目标</Link></>, '/admin/photos/31', '/admin/photos/:id');
+  const original = await screen.findByRole('img');
+  const cancel = queryClient.cancelQueries.bind(queryClient);
+  const cancelSpy = vi.spyOn(queryClient, 'cancelQueries').mockImplementation(async (...args) => { await cancel(...args); await cancellation.promise; });
+  fireEvent.error(original);
+  await waitFor(() => expect(cancelSpy).toHaveBeenCalledTimes(1));
+  await user.click(screen.getByRole('link', { name: '切换目标' }));
+  expect(await screen.findByText('另一位钓友')).toBeVisible();
+  await act(async () => { cancellation.resolve(undefined); });
+  expect(fetchAdminPhoto).toHaveBeenCalledTimes(2);
+  expect(fetchAdminPhoto).toHaveBeenLastCalledWith(32);
+  expect(screen.getByText('另一位钓友')).toBeVisible();
 });
 
 test('late private detail response after logout cannot restore any cached metadata or image', async () => {
