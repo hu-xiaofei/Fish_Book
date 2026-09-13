@@ -153,13 +153,13 @@ docker compose -f compose.yaml -f compose.full.yaml down
 ```bash
 cd backend && ./mvnw test
 cd ../frontend && npm ci && npm run lint && npm test && npm run build
-cd ../e2e && npm ci && npx playwright install chromium && npm test
-cd .. && docker compose --env-file .env.example -f compose.yaml -f compose.full.yaml config --quiet
+cd ../e2e && npm ci && npx playwright install chromium
+npm run test:preflight && npm run test:isolated
 ```
 
 - 后端测试使用 Testcontainers 启动真实 MySQL，因此需要 Docker 正在运行。
-- Playwright 测试需要先通过完整 Docker Compose 命令启动应用，并覆盖身份、公开图鉴、管理员草稿/发布/下架与权限拒绝、私有收藏、钓获记录，以及私有照片上传、隔离、替换和移除主流程。
-- 以上是与 CI 覆盖范围一致的本地验证流程。GitHub Actions 会在推送到 `main` 和 Pull Request 时执行后端、前端、Docker 与端到端测试；Linux CI 还会使用 Maven 批处理模式、安装 Playwright 系统依赖，并在端到端测试前启动和等待完整服务栈。
+- `test:isolated` 使用 `.env.example` 创建全新专用 Compose 项目，前端绑定动态 IPv4 loopback 端口，数据库/MinIO 不发布主机端口；等待健康后运行所有浏览器流程和管理员审计断言，完成或失败后精确删除该项目的测试数据。需要 Docker Compose 2.24.4+，不能使用已有用户数据栈。
+- CI 与本地共用这个隔离入口；Linux CI 额外安装 Playwright 系统依赖。直接 `npm test` 仅允许显式指定已经验证的可丢弃项目，缺少环境会在任何浏览器测试前拒绝执行。详见[管理员照片验收](docs/runbooks/admin-photo-management.md#独立本地验收)。本地等效入口已验证，远程 GitHub Actions 本轮未运行。
 
 ### 项目结构
 
@@ -348,13 +348,13 @@ Run these commands in order from the repository root:
 ```bash
 cd backend && ./mvnw test
 cd ../frontend && npm ci && npm run lint && npm test && npm run build
-cd ../e2e && npm ci && npx playwright install chromium && npm test
-cd .. && docker compose --env-file .env.example -f compose.yaml -f compose.full.yaml config --quiet
+cd ../e2e && npm ci && npx playwright install chromium
+npm run test:preflight && npm run test:isolated
 ```
 
 - Backend tests use Testcontainers with a real MySQL instance, so Docker must be running.
-- Playwright requires the full application stack to be running first and covers identity, the public catalog, administrator draft/publish/unpublish behavior and access denial, private favorites, catch records, and private-photo upload, isolation, replacement, and removal.
-- The commands above are the local equivalent of the CI verification scope. GitHub Actions runs backend, frontend, Docker, and end-to-end checks for pushes to `main` and for pull requests; Linux CI additionally uses Maven batch mode, installs Playwright system dependencies, and starts and waits for the full stack before the end-to-end tests.
+- `test:isolated` creates a fresh dedicated Compose project using `.env.example`, a dynamic IPv4 loopback frontend port, and no published database/MinIO ports. It waits for health, runs every browser flow including the administrator database audit, then deletes only that project's disposable data on success or failure. Docker Compose 2.24.4+ is required; never use an existing user-data stack.
+- CI shares this isolated entry; Linux additionally installs Playwright system dependencies. Plain `npm test` requires an explicit verified disposable project and fails before any browser test when it is missing. See [administrator photo acceptance](docs/runbooks/admin-photo-management.md#独立本地验收). The equivalent local entry was verified; remote GitHub Actions was not run in this change.
 
 ### Project Structure
 

@@ -62,51 +62,27 @@ V10 给 `catch_records` 增加 `version BIGINT NOT NULL DEFAULT 0`，并创建 `
 
 ## 独立本地验收
 
-不要对已有 `fishbook` 项目运行验收或重新构建：测试会注册用户并写入照片。2026-09-13 验收专用项目为 `fishbook-admin-photo-acceptance-20260913`，只使用 `.env.example`，没有读取真实 `.env`。Compose v5.3.1 支持下面的 `!override`，此文件存放在仓库之外；不要为验收修改正式 Compose 端口：
-
-```yaml
-# /private/tmp/fishbook-admin-photo-acceptance.compose.yaml
-services:
-  mysql:
-    ports: !override ["127.0.0.1:13306:3306"]
-  minio:
-    ports: !override ["127.0.0.1:19000:9000", "127.0.0.1:19001:9001"]
-  frontend:
-    ports: !override ["127.0.0.1:18080:8080"]
-```
-
-在仓库根目录检查解析后的 `name`、`host_ip`、卷名，确认没有指向既有项目，再执行：
+不要对已有 `fishbook` 项目运行验收或重新构建：测试会注册用户并写入照片。本地与 CI 统一使用 `e2e/scripts/disposable.cjs` 和版本控制中的 `e2e/compose.disposable.yaml`、`e2e/playwright.config.ts`。Node 24.18.0、Docker Compose 2.24.4+、锁定 Playwright 1.62.1 及匹配浏览器为前置条件，未新增依赖。在 `e2e/` 执行：
 
 ```sh
-docker compose --project-name fishbook-admin-photo-acceptance-20260913 --env-file .env.example -f compose.yaml -f compose.full.yaml -f /private/tmp/fishbook-admin-photo-acceptance.compose.yaml config
-docker compose --project-name fishbook-admin-photo-acceptance-20260913 --env-file .env.example -f compose.yaml -f compose.full.yaml -f /private/tmp/fishbook-admin-photo-acceptance.compose.yaml up --build --detach --wait
-curl -fsS http://127.0.0.1:18080/actuator/health/readiness
+npm ci
+npx playwright install chromium
+npm run test:preflight
+npm run test:config
+npm run test:isolated
 ```
 
-另建仓库外的 Playwright `.cjs` 配置，使用本机 checkout 的绝对 `testDir`（下面为本次路径），关闭整用例自动重试以保留真实结果：
+`test:isolated` 自动生成 `fishbook-admin-photo-acceptance-<时间>-<进程>` 项目名，也可通过 `FISHBOOK_E2E_DISPOSABLE_PROJECT` 指定同前缀的新名字。入口仅读取 `.env.example`；在创建任何资源前校验解析后的专用网络/卷、loopback 和数据库端口隔离，并拒绝已存在的同名资源。前端使用动态的 `127.0.0.1` 端口，MySQL/MinIO 不发布主机端口。启动并等待健康后，从标有该项目的前端容器读取实际端口，交给整套测试；完成或失败后 `finally` 仅对此新项目执行 `down --volumes`，删除其测试用户、会话、钓获和照片，保留构建镜像与测试输出。不使用正式 Compose 默认端口、不覆盖真实 `.env`。
 
-```js
-module.exports = {
-  retries: 0,
-  workers: 1,
-  testDir: '/Users/hdc/Desktop/Fish_Book/.worktrees/admin-photo-management/e2e/tests',
-  outputDir: '/private/tmp/fishbook-admin-photo-acceptance-results',
-  use: {
-    baseURL: 'http://127.0.0.1:18080',
-    screenshot: 'only-on-failure',
-    trace: 'retain-on-failure',
-  },
-};
-```
-
-Node 24.18.0、现有锁定 Playwright 1.62.1 与已匹配的 Chromium headless shell 可运行本次验收，未新增依赖。在 `e2e/` 执行：
+如需复用已经批准保留的独立测试栈，明确指定它再运行；此模式不启动、重建或清理资源：
 
 ```sh
-FISHBOOK_E2E_DISPOSABLE_PROJECT=fishbook-admin-photo-acceptance-20260913 npm test -- --config=/private/tmp/fishbook-admin-photo-acceptance.playwright.config.cjs tests/admin-photo-flow.spec.ts
-FISHBOOK_E2E_DISPOSABLE_PROJECT=fishbook-admin-photo-acceptance-20260913 npm test -- --config=/private/tmp/fishbook-admin-photo-acceptance.playwright.config.cjs
+FISHBOOK_E2E_DISPOSABLE_PROJECT=fishbook-admin-photo-acceptance-20260913 npm test
 ```
 
-管理员 fixture 在业务写入之前检查专用项目名、前端容器标签及实际 loopback 端口；审计查询再次检查数据库容器项目标签，仅使用公开的本地样例账号。缺少该环境或 Docker 权限视为无法验证/失败，不能跳过后报告通过。不要通过关闭生产 Secure Cookie 来运行云端测试。
+整个 suite 的前置检查发生在任何浏览器测试之前，`fishbook`、缺失项目、标签不符和非 loopback 映射均拒绝；默认 Playwright 配置也执行同一检查，直接调用不会回落到8080。管理员 fixture 和可信数据库审计的独立检查继续保留。缺少环境或 Docker 权限就是无法验证/失败，不能跳过审计后报告通过。不要通过关闭生产 Secure Cookie 来运行云端测试。
+
+GitHub Actions 的 `docker-and-e2e` 使用同一 `test:isolated`，项目名包含 `github.run_id/run_attempt`，安装浏览器系统依赖后执行，失败时保留 Playwright 输出用于上传。CI 工作流已静态解析，本机实际运行过等效入口；本轮未推送或启动远程 Actions，不能声明远程 CI 已通过。进程被强制终止时 `finally` 可能来不及执行；只按日志中明确项目名核实并清理，不做广泛 prune。
 
 ## 2026-09-13 实测结果与保留资源
 
@@ -118,12 +94,15 @@ FISHBOOK_E2E_DISPOSABLE_PROJECT=fishbook-admin-photo-acceptance-20260913 npm tes
 | 前端 `npm run build` / `npm run lint` | 类型/生产构建及 lint 通过 | `/private/tmp/fishbook-task5-frontend-build.log`、`fishbook-task5-frontend-lint.log` |
 | 全部实际浏览器流程 | 10/10，通过，0 整用例重试，15.9 秒 | `/private/tmp/fishbook-task5-full-e2e.log` |
 | 最终 fixture 安全校验后的管理员专项 | 1/1，通过，4.5 秒 | `/private/tmp/fishbook-task5-admin-e2e-final.log` |
+| F5.1 可移植隔离入口 `npm run test:isolated` | 新建专用项目，10/10，通过，16.0 秒，随后精确清理 | `/private/tmp/fishbook-task5-f5-1-isolated-e2e.log` |
+| F5.1 最终共享配置 `npm test` | 保留审查栈，10/10，通过，14.9 秒 | `/private/tmp/fishbook-task5-f5-1-final-config-e2e.log` |
+| F5.1 入口防护与工作流 | 防护4/4；危险旧项目拒绝；Compose及CI YAML解析通过 | `/private/tmp/fishbook-task5-f5-1-green.log`、`fishbook-task5-f5-1-config.log` |
 
 首次管理员专项也是 1/1 通过；没有将缺环境、导入或断言失败伪装为测试先行的失败证据。测试先于验收执行编写，未修改产品代码。中间额度暂停后继续同一环境；测试结果的上述时间差不代表重复验证。
 
 独立 owner、ADMIN、陌生人和匿名浏览器上下文实际完成：上传；管理员按可见 owner ID 筛选及预览；替换取消后字节不变；确认替换；所有者刷新获取替换字节；两个已打开页面的同版本竞争由 owner 先提交，admin 收到 `409`，期间只有一次失败写入且未重试，胜者字节保留；管理员重新确认删除，所有者照片消失而其他记录字段保持；陌生人 URL/API、匿名读取被拒绝；退出并切换账号后照片与本地预览消失。图片 GET 的 no-store、强 ETag 和完整字节比较来自浏览器实际响应。
 
-受信任的本地数据库证据保存在 `/private/tmp/fishbook-task5-disposable-db-evidence.log`：V10 `success=1`，三个独立验收记录各只有两条管理成功操作。例如最终记录 `6`：actor `1`（数据库角色 ADMIN）、owner `15`，`REPLACED previous_version=1`、`REMOVED previous_version=3`。owner 的竞争胜出和再次上传均未新增管理证据，失败/取消也没有成功记录。具体 ID 仅属于本次可丢弃 fixture，重跑会改变。
+初次交付时受信任的本地数据库证据保存在 `/private/tmp/fishbook-task5-disposable-db-evidence.log`：V10 `success=1`，三个独立验收记录各只有两条管理成功操作。例如当时记录 `6`：actor `1`（数据库角色 ADMIN）、owner `15`，`REPLACED previous_version=1`、`REMOVED previous_version=3`。owner 的竞争胜出和再次上传均未新增管理证据，失败/取消也没有成功记录。具体 ID 仅属于本次可丢弃 fixture，后续复验会增加独立记录。
 
 为最终整体审查暂保留以下资源，尚未清理；协调代理在整体审查结束后负责精确清理：
 
@@ -132,6 +111,8 @@ FISHBOOK_E2E_DISPOSABLE_PROJECT=fishbook-admin-photo-acceptance-20260913 npm tes
 - 网络：`fishbook-admin-photo-acceptance-20260913_default`。
 - 本地构建镜像：`fishbook-admin-photo-acceptance-20260913-backend:latest`、`fishbook-admin-photo-acceptance-20260913-frontend:latest`。
 - Scratch 配置、解析结果和日志保留于 `/private/tmp/fishbook-admin-photo-acceptance*`、`/private/tmp/fishbook-task5-*`，不是永久归档。
+
+F5.1 可移植入口另建的 `fishbook-admin-photo-acceptance-task5-f51` 已完成自动清理：只删除它的测试容器、两个数据卷和网络，之后逐类查询为空；这些测试数据不可恢复。它的 backend/frontend 本地构建镜像仍保留。上述20260913审查项目未清理，原有 `fishbook` 项目未参与操作。
 
 只在确认这仍是本次一次性项目后，使用相同 project/env/三个配置执行 `down --volumes`。这会不可恢复地移除该项目的测试用户、记录、会话和 MinIO 图片；保留本地构建镜像和日志。不要省略 project 或执行广泛 prune。既有 `fishbook` 的 8080/3306/9000/9001 容器和卷未被重启、迁移、查询私有数据或复用；最终只读状态记录仍为原有 uptime。
 

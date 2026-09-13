@@ -243,7 +243,8 @@ Run backend and frontend checks, then follow the [isolated acceptance setup](adm
 cd backend && ./mvnw -B test && ./mvnw -B -DskipTests package
 cd ../frontend && npm ci && npm run lint && npm test && npm run build
 cd ../e2e && npm ci
-# Start the disposable stack and use its isolated Playwright config as documented.
+npx playwright install chromium
+npm run test:preflight && npm run test:isolated
 ```
 
 The Playwright suite covers registration, login, JDBC-backed session restoration after reload, nickname persistence, logout, protected-route redirection, public catalog and administrator publishing, private favorites, catch CRUD, and owner photo operations. The administrator photo flow adds independent roles, cancel/confirm, a real owner/admin conflict, no automatic retry, no-store browser reads, account-switch content removal, and a trusted disposable database audit assertion. Actual current counts and limitations are recorded in the administrator photo runbook.

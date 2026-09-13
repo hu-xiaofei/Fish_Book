@@ -7,7 +7,10 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "playwright test"
+    "test": "node scripts/disposable.cjs test",
+    "test:isolated": "node scripts/disposable.cjs run",
+    "test:preflight": "node --test scripts/disposable.test.cjs",
+    "test:config": "node scripts/disposable.cjs config"
   },
   "keywords": [],
   "author": "",

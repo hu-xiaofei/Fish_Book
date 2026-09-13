@@ -1,0 +1,10 @@
+# Test-only override. Does not modify normal development Compose defaults.
+# Requires Docker Compose 2.24.4+ for !override / !reset.
+services:
+  mysql:
+    ports: !reset []
+  minio:
+    ports: !reset []
+  frontend:
+    ports: !override
+      - "127.0.0.1::8080"
