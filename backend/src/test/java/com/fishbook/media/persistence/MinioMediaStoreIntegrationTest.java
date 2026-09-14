@@ -13,7 +13,7 @@ import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
 class MinioMediaStoreIntegrationTest {
-    private static final String IMAGE = "minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1";
+    private static final String IMAGE = "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1";
     private static final String ACCESS_KEY = "test-access-key";
     private static final String SECRET_KEY = "test-secret-key-123";
     private static final String BUCKET = "catch-photo-test";
