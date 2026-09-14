@@ -1,4 +1,5 @@
 const { execFileSync, spawnSync } = require('node:child_process');
+const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const e2e = path.resolve(__dirname, '..');
 const root = path.resolve(e2e, '..');
@@ -68,7 +69,10 @@ function main(command, args) {
   const project = projectName(process.env.FISHBOOK_E2E_DISPOSABLE_PROJECT
     || `fishbook-admin-photo-acceptance-${Date.now()}-${process.pid}`);
   const compose = composeArgs(project);
-  const config = JSON.parse(execFileSync('docker', [...compose, 'config', '--format', 'json'], { encoding: 'utf8', cwd: root }));
+  // --env-file alone loses to exported variables. Override only keys explicitly
+  // declared in the trusted sample, keeping PATH and Docker connection settings.
+  const composeEnv = composeEnvironment(readFileSync(path.join(root, '.env.example'), 'utf8'));
+  const config = JSON.parse(execFileSync('docker', [...compose, 'config', '--format', 'json'], { encoding: 'utf8', cwd: root, env: composeEnv }));
   validateConfiguration(project, config);
   console.log(`Disposable project: ${project}; sample settings; dynamic loopback frontend; private database/storage`);
   if (command === 'config') return 0;
@@ -84,15 +88,31 @@ function main(command, args) {
     }
   }
   try {
-    execFileSync('docker', [...compose, 'up', '--build', '--detach', '--wait', '--wait-timeout', '180'], { stdio: 'inherit', cwd: root });
+    execFileSync('docker', [...compose, 'up', '--build', '--detach', '--wait', '--wait-timeout', '180'], { stdio: 'inherit', cwd: root, env: composeEnv });
     return tests(project, args);
   } finally {
     // Only reached after name/config/absence checks authorized this new project.
-    execFileSync('docker', [...compose, 'down', '--volumes'], { stdio: 'inherit', cwd: root });
+    execFileSync('docker', [...compose, 'down', '--volumes'], { stdio: 'inherit', cwd: root, env: composeEnv });
   }
 }
 
-module.exports = { projectName, validateConfiguration, verifyTarget };
+function composeEnvironment(sample, ambient = process.env) {
+  const env = { ...ambient };
+  for (const raw of sample.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const assignment = /^([A-Z][A-Z0-9_]*)=([^\r\n]*)$/.exec(line);
+    // The checked-in sample uses literal unquoted values. Fail closed if it
+    // starts requiring dotenv interpolation/quoting this reader cannot match.
+    if (!assignment || /[\s'"$#]/.test(assignment[2])) {
+      throw new Error('Unsupported sample environment format; expected literal KEY=value');
+    }
+    env[assignment[1]] = assignment[2];
+  }
+  return env;
+}
+
+module.exports = { projectName, validateConfiguration, verifyTarget, composeEnvironment };
 if (require.main === module) {
   try { process.exitCode = main(process.argv[2], process.argv.slice(3)); }
   catch (error) { console.error(error.message); process.exitCode = 1; }

@@ -1,6 +1,28 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { projectName, validateConfiguration, verifyTarget } = require('./disposable.cjs');
+const { projectName, validateConfiguration, verifyTarget, composeEnvironment } = require('./disposable.cjs');
+
+test('sample interpolation keys override ambient values without removing Docker connection settings', () => {
+  const ambient = {
+    MYSQL_DATABASE: 'synthetic_ambient_database',
+    MYSQL_PASSWORD: 'synthetic_ambient_password',
+    FISHBOOK_ADMIN_BOOTSTRAP_ENABLED: 'false',
+    PATH: '/synthetic/tool/path',
+    DOCKER_HOST: 'unix:///synthetic/docker.sock',
+  };
+  const sample = '# Sample only\nMYSQL_DATABASE=fixture_db\nMYSQL_PASSWORD=fixture_password\nFISHBOOK_ADMIN_BOOTSTRAP_ENABLED=true\n';
+  const actual = composeEnvironment(sample, ambient);
+  assert.equal(actual.MYSQL_DATABASE, 'fixture_db');
+  assert.equal(actual.MYSQL_PASSWORD, 'fixture_password');
+  assert.equal(actual.FISHBOOK_ADMIN_BOOTSTRAP_ENABLED, 'true');
+  assert.equal(actual.PATH, ambient.PATH);
+  assert.equal(actual.DOCKER_HOST, ambient.DOCKER_HOST);
+  assert.equal(ambient.MYSQL_DATABASE, 'synthetic_ambient_database');
+});
+
+test('rejects sample expansion rather than resolving it from ambient values', () => {
+  assert.throws(() => composeEnvironment('MYSQL_PASSWORD=${AMBIENT_PASSWORD}'), /sample environment format/);
+});
 
 test('rejects the long-lived project before Docker or any browser test can run', () => {
   let called = false;

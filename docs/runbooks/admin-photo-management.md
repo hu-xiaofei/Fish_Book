@@ -74,6 +74,8 @@ npm run test:isolated
 
 `test:isolated` 自动生成 `fishbook-admin-photo-acceptance-<时间>-<进程>` 项目名，也可通过 `FISHBOOK_E2E_DISPOSABLE_PROJECT` 指定同前缀的新名字。入口仅读取 `.env.example`；在创建任何资源前校验解析后的专用网络/卷、loopback 和数据库端口隔离，并拒绝已存在的同名资源。前端使用动态的 `127.0.0.1` 端口，MySQL/MinIO 不发布主机端口。启动并等待健康后，从标有该项目的前端容器读取实际端口，交给整套测试；完成或失败后 `finally` 仅对此新项目执行 `down --volumes`，删除其测试用户、会话、钓获和照片，保留构建镜像与测试输出。不使用正式 Compose 默认端口、不覆盖真实 `.env`。
 
+样例文件声明的变量会显式覆盖父进程导出的同名变量；`config/up/down` 使用同一个受控环境，保留 PATH 和 Docker 连接设置。仅 `--env-file` 不足以提供这个保证。当前样例使用无引号的字面 `KEY=value`；若将来需要引号或变量展开，入口会拒绝不支持的格式，不会从父环境补出未知凭据。诊断不打印环境内容。
+
 如需复用已经批准保留的独立测试栈，明确指定它再运行；此模式不启动、重建或清理资源：
 
 ```sh
@@ -97,6 +99,8 @@ GitHub Actions 的 `docker-and-e2e` 使用同一 `test:isolated`，项目名包�
 | F5.1 可移植隔离入口 `npm run test:isolated` | 新建专用项目，10/10，通过，16.0 秒，随后精确清理 | `/private/tmp/fishbook-task5-f5-1-isolated-e2e.log` |
 | F5.1 最终共享配置 `npm test` | 保留审查栈，10/10，通过，14.9 秒 | `/private/tmp/fishbook-task5-f5-1-final-config-e2e.log` |
 | F5.1 入口防护与工作流 | 防护4/4；危险旧项目拒绝；Compose及CI YAML解析通过 | `/private/tmp/fishbook-task5-f5-1-green.log`、`fishbook-task5-f5-1-config.log` |
+| F5.2 父环境覆盖防护 | 防护6/6；真实Compose解析断言通过 | `/private/tmp/fishbook-task5-f5-2-green.log`、`fishbook-task5-f5-2-resolved-assertions.log` |
+| F5.2 带人工环境冲突的隔离验收 | 10/10，通过，15.9秒，随后精确清理 | `/private/tmp/fishbook-task5-f5-2-isolated-e2e.log` |
 
 首次管理员专项也是 1/1 通过；没有将缺环境、导入或断言失败伪装为测试先行的失败证据。测试先于验收执行编写，未修改产品代码。中间额度暂停后继续同一环境；测试结果的上述时间差不代表重复验证。
 
@@ -113,6 +117,8 @@ GitHub Actions 的 `docker-and-e2e` 使用同一 `test:isolated`，项目名包�
 - Scratch 配置、解析结果和日志保留于 `/private/tmp/fishbook-admin-photo-acceptance*`、`/private/tmp/fishbook-task5-*`，不是永久归档。
 
 F5.1 可移植入口另建的 `fishbook-admin-photo-acceptance-task5-f51` 已完成自动清理：只删除它的测试容器、两个数据卷和网络，之后逐类查询为空；这些测试数据不可恢复。它的 backend/frontend 本地构建镜像仍保留。上述20260913审查项目未清理，原有 `fishbook` 项目未参与操作。
+
+F5.2 环境修复复验另建的 `fishbook-admin-photo-acceptance-task5-f52` 也已按同样范围完成清理并查询为空。它只使用样例与人工冲突标记，未读取或输出真实父环境凭据；新测试数据不可恢复，构建镜像和日志保留，20260913审查项目继续保留。
 
 只在确认这仍是本次一次性项目后，使用相同 project/env/三个配置执行 `down --volumes`。这会不可恢复地移除该项目的测试用户、记录、会话和 MinIO 图片；保留本地构建镜像和日志。不要省略 project 或执行广泛 prune。既有 `fishbook` 的 8080/3306/9000/9001 容器和卷未被重启、迁移、查询私有数据或复用；最终只读状态记录仍为原有 uptime。
 
