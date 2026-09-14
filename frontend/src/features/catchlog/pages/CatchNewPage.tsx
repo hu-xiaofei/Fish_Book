@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { ApiError } from '../../../shared/api/ApiError';
 import { isConfirmedUnauthorized } from '../../auth/api/currentUser';
@@ -26,6 +26,7 @@ import {
   validateCatchPhotoFile,
 } from '../api/catchPhotoApi';
 import { CatchRecordForm } from '../components/CatchRecordForm';
+import { invalidateOwnerPhotoConsumers, publishOwnerPhotoState, readOwnerPhotoState } from '../api/ownerPhotoState';
 import type { CatchRecordDetail, CatchRecordInput } from '../model/types';
 import styles from './CatchPages.module.css';
 
@@ -33,6 +34,10 @@ export function CatchNewPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { sessionExpired, expireIfUnauthorized } = useSessionExpiry();
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const current = (generation: number) => mounted.current && isCurrentSessionGeneration(generation);
+  const [terminalError, setTerminalError] = useState<number>();
   const [selectedPhoto, setSelectedPhoto] = useState<File>();
   const [photoValidationError, setPhotoValidationError] = useState<string>();
   const [retryDetail, setRetryDetail] = useState<CatchRecordDetail>();
@@ -75,14 +80,23 @@ export function CatchNewPage() {
     retry: false,
   });
 
+  const handleReadFailure = (error: unknown, id: number) => {
+    if (expireIfUnauthorized(error)) return true;
+    if (!(error instanceof ApiError) || (error.status !== 403 && error.status !== 404)) return false;
+    setRetryDetail(undefined); setSelectedPhoto(undefined); setUploadFailure(undefined); setTerminalError(error.status);
+    queryClient.removeQueries({ queryKey: catchDetailQueryKey(id), exact: true });
+    return true;
+  };
+
   const cacheCreatedCatch = async (
     createdCatch: CatchRecordDetail,
     sessionGeneration: number,
   ) => {
     if (!isCurrentSessionGeneration(sessionGeneration)) return false;
-    queryClient.setQueryData(catchDetailQueryKey(createdCatch.id), createdCatch);
+    await publishOwnerPhotoState(queryClient, createdCatch, () => current(sessionGeneration));
+    if (!isCurrentSessionGeneration(sessionGeneration)) return false;
     await queryClient.invalidateQueries({ queryKey: CATCHES_QUERY_KEY });
-    return isCurrentSessionGeneration(sessionGeneration);
+    return current(sessionGeneration);
   };
 
   const finishPhotoUpload = async (
@@ -90,7 +104,7 @@ export function CatchNewPage() {
     photo: File,
     sessionGeneration: number,
   ) => {
-    if (!isCurrentSessionGeneration(sessionGeneration)) return;
+    if (!current(sessionGeneration)) return;
     setFinishingUpload(true);
     setRetryDetail(undefined);
     setRetryError(undefined);
@@ -100,44 +114,41 @@ export function CatchNewPage() {
           recordId: createdCatch.id, revision: createdCatch.revision, photo,
         });
       } catch (error) {
-        if (!isCurrentSessionGeneration(sessionGeneration)) return;
-        if (expireIfUnauthorized(error)) return;
+        if (!current(sessionGeneration)) return;
+        if (handleReadFailure(error, createdCatch.id)) return;
         setUploadFailure({ createdCatch, photo, sessionGeneration });
         if (error instanceof ApiError && error.status === 409 && error.body.code === 'CATCH_PHOTO_CONFLICT') {
           setRetryError('照片或记录已被修改，请刷新后重新确认操作');
           // Refresh metadata only: the next write still needs a new review action.
           try {
-            const current = await fetchCatchRecord(createdCatch.id);
-            if (!isCurrentSessionGeneration(sessionGeneration)) return;
-            queryClient.setQueryData(catchDetailQueryKey(createdCatch.id), current);
+            await readOwnerPhotoState(queryClient, createdCatch.id, () => current(sessionGeneration));
           } catch (refreshError) {
-            if (!isCurrentSessionGeneration(sessionGeneration)) return;
-            expireIfUnauthorized(refreshError);
+            if (!current(sessionGeneration)) return;
+            handleReadFailure(refreshError, createdCatch.id);
           }
         }
         return;
       }
 
       if (!isCurrentSessionGeneration(sessionGeneration)) return;
+      await invalidateOwnerPhotoConsumers(queryClient, createdCatch.id, mounted.current);
+      if (!current(sessionGeneration)) return;
       // A 204 does not reveal the persisted revision. Never invent the next version.
-      let current: CatchRecordDetail;
       try {
-        current = await fetchCatchRecord(createdCatch.id);
+        const detail = await readOwnerPhotoState(queryClient, createdCatch.id, () => current(sessionGeneration));
+        if (!detail || !current(sessionGeneration)) return;
       } catch (error) {
-        if (!isCurrentSessionGeneration(sessionGeneration)) return;
-        if (expireIfUnauthorized(error)) return;
+        if (!current(sessionGeneration)) return;
+        if (handleReadFailure(error, createdCatch.id)) return;
         setUploadFailure({ createdCatch, photo, sessionGeneration, uploaded: true });
         setRetryError('刷新照片状态失败，请查看当前状态后再操作');
         return;
       }
-      if (!isCurrentSessionGeneration(sessionGeneration)) return;
-      queryClient.setQueryData(catchDetailQueryKey(createdCatch.id), current);
-      await queryClient.invalidateQueries({ queryKey: CATCHES_QUERY_KEY });
-      if (!isCurrentSessionGeneration(sessionGeneration)) return;
+      if (!current(sessionGeneration)) return;
       setUploadFailure(undefined);
       navigate(`/catches/${createdCatch.id}`);
     } finally {
-      if (isCurrentSessionGeneration(sessionGeneration)) setFinishingUpload(false);
+      if (current(sessionGeneration)) setFinishingUpload(false);
     }
   };
 
@@ -155,25 +166,24 @@ export function CatchNewPage() {
   };
 
   const reviewRetry = async () => {
-    if (!uploadFailure || !isCurrentSessionGeneration(uploadFailure.sessionGeneration)) return;
+    if (!uploadFailure || !current(uploadFailure.sessionGeneration)) return;
     const failure = uploadFailure;
     setRetryDetail(undefined);
     setRetryError(undefined);
     setReviewingRetry(true);
     try {
-      const current = await fetchCatchRecord(failure.createdCatch.id);
-      if (!isCurrentSessionGeneration(failure.sessionGeneration)) return;
-      queryClient.setQueryData(catchDetailQueryKey(current.id), current);
-      setRetryDetail(current);
-      if (current.revision !== failure.createdCatch.revision) {
+      const detail = await readOwnerPhotoState(queryClient, failure.createdCatch.id, () => current(failure.sessionGeneration));
+      if (!detail || !current(failure.sessionGeneration)) return;
+      setRetryDetail(detail);
+      if (detail.revision !== failure.createdCatch.revision) {
         setRetryError('照片或记录已被修改，请刷新后重新确认操作');
       }
     } catch (error) {
-      if (!isCurrentSessionGeneration(failure.sessionGeneration)) return;
-      if (expireIfUnauthorized(error)) return;
+      if (!current(failure.sessionGeneration)) return;
+      if (handleReadFailure(error, failure.createdCatch.id)) return;
       setRetryError('加载当前照片状态失败，请稍后重试');
     } finally {
-      if (isCurrentSessionGeneration(failure.sessionGeneration)) setReviewingRetry(false);
+      if (current(failure.sessionGeneration)) setReviewingRetry(false);
     }
   };
 
@@ -184,6 +194,7 @@ export function CatchNewPage() {
   if (sessionExpired || isConfirmedUnauthorized(createMutation.error)) {
     return <Navigate to="/login" replace />;
   }
+  if (terminalError) return <main className={styles.page}><h1>{terminalError === 404 ? '没有找到钓获记录' : '没有照片访问权限'}</h1><Link to="/catches">返回钓获记录</Link></main>;
 
   return (
     <main className={styles.page}>

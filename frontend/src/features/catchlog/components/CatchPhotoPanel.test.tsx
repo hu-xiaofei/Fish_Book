@@ -283,7 +283,7 @@ test('changing target clears the selected file and open confirmation', async () 
   expect(removeCatchPhotoMock).not.toHaveBeenCalled();
 });
 
-test('a pending upload and its refresh remain bound to the captured target', async () => {
+test('a pending upload invalidates its old target without publishing after target change', async () => {
   const uploading = deferred<void>();
   putCatchPhotoMock.mockReturnValue(uploading.promise);
   const { user, queryClient } = renderPanel(true);
@@ -292,7 +292,8 @@ test('a pending upload and its refresh remain bound to the captured target', asy
   await user.click(screen.getByRole('button', { name: '替换照片' }));
   await user.click(screen.getByRole('button', { name: '切换记录' }));
   uploading.resolve();
-  await waitFor(() => expect(fetchCatchRecordMock).toHaveBeenCalledWith(31));
+  await waitFor(() => expect(queryClient.getQueryState(catchDetailQueryKey(31))?.isInvalidated).toBe(true));
+  expect(fetchCatchRecordMock).not.toHaveBeenCalled();
   expect(putCatchPhotoMock).toHaveBeenCalledWith(31, photo, '7');
   expect(queryClient.getQueryData<CatchRecordDetail>(catchDetailQueryKey(99))?.revision).toBe('12');
   expect(screen.getByRole('img')).toHaveAttribute('src', '/api/v1/catches/99/photo?revision=12&reload=0');

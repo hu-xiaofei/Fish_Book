@@ -122,10 +122,23 @@ F5.2 环境修复复验另建的 `fishbook-admin-photo-acceptance-task5-f52` 也
 
 只在确认这仍是本次一次性项目后，使用相同 project/env/三个配置执行 `down --volumes`。这会不可恢复地移除该项目的测试用户、记录、会话和 MinIO 图片；保留本地构建镜像和日志。不要省略 project 或执行广泛 prune。既有 `fishbook` 的 8080/3306/9000/9001 容器和卷未被重启、迁移、查询私有数据或复用；最终只读状态记录仍为原有 uptime。
 
+## 2026-09-14 所有者详情发布竞态修复复验
+
+最终审查的 FINAL-1 覆盖所有者删除/上传后的详情刷新，以及新建页的创建响应、上传成功、冲突刷新和重试确认。直接读取前、发布前取消精确详情查询；每次等待后检查页面/目标和会话；按实际已观察到的字符串版本以 BigInt 比较，不推算版本。迟到页面不能恢复缓存，成功写入仍使相关用户/管理员消费者失效；403/404 移除对应私有详情并关闭照片界面，401 沿用会话清理。
+
+| 检查 | 实际结果 | 本机日志 |
+| --- | --- | --- |
+| 新增真实页面回归初始 RED | 13 失败、3 通过；旧响应恢复照片、导航迟到写入、权限/404 与失效边界的实际断言失败 | `/private/tmp/fishbook-final-fix-red.log` |
+| 最终完整前端 `npm test` | 43 文件、373 测试通过，含新增 33 项回归；10:58:23 +08:00 | `/private/tmp/fishbook-final-fix-full-test-final.log` |
+| 前端 `npm run build` / `npm run lint` | 类型/生产构建及 lint 通过；保留主包体积警告 | `/private/tmp/fishbook-final-fix-full-build.log`、`fishbook-final-fix-full-lint.log` |
+| 全新隔离项目 `npm run test:isolated` | 10/10 真实浏览器流程通过，15.9 秒，随后精确清理 | `/private/tmp/fishbook-final-fix-isolated-e2e-authorized.log` |
+
+本次自动生成的专用项目为 `fishbook-admin-photo-acceptance-1789354595738-64551`。入口删除了且只删除此项目的 4 个容器、`_mysql-data`/`_minio-data` 两个测试卷和 `_default` 网络；之后按精确项目标签/名字查询均为空。测试数据不可恢复，构建镜像和日志保留。首次无 Docker socket 权限的预检未创建资源；后续按已授权范围完成验收。本次未使用或改变上文保留的 20260913 审查项目和旧 `fishbook`，未重新执行后端 373 项测试，后端证据仍是上表既有运行。最终独立范围复审由协调代理继续。
+
 ## 尚未完成的边界与风险
 
 此验收不证明 OSS 云角色、签名、临时凭证刷新、生产网络或 RDS 迁移成功；V10 仅在本地可丢弃数据库执行。私有 Bucket、无公开 URL、浏览器 HTTPS、生产 Secure Cookie、OSS HTTPS/V4/证书校验要求没有放宽。已批准的学习型 RDS 内网非加密例外不能扩展为其他传输例外。
 
-测试通过不等于没有已知风险：所有者 `CatchPhotoPanel` 的手动详情读取与后台查询响应先后顺序存在已记录待整体审查项，本专项没有强制复现或证明其安全；管理员同类缓存竞争已在此前任务修复并纳入本次完整组件测试。确认面板的焦点管理仍是已记录的轻微可访问性问题。生产 JS 主包 508.87 kB（gzip 150.76 kB）触发已有 500 kB 警告；后端故意失败场景的 WARN/ERROR（含补偿无法入队、清理耗尽和既有处理器堆栈）与 JVM 动态 agent 警告、Playwright 色彩环境警告仍保留。
+测试通过不等于没有已知风险：上述所有者 FINAL-1 修复已完成回归和隔离浏览器验证，独立范围复审尚待协调代理完成；管理员同类缓存竞争已在此前任务修复并纳入完整组件测试。确认面板的焦点管理仍是已记录的轻微可访问性问题。最新生产 JS 主包 510.93 kB（gzip 151.49 kB）触发已有 500 kB 警告；后端故意失败场景的 WARN/ERROR（含补偿无法入队、清理耗尽和既有处理器堆栈）与 JVM 动态 agent 警告、Playwright 色彩环境警告仍保留。
 
 依赖没有升级。安装时的两条 moderate 项对应同一 [Vitest 开发服务器公告](https://github.com/vitest-dev/vitest/security/advisories/GHSA-82fw-gwwq-j7x9)，4.1.10 不在修复版本内；仅使用 loopback 不构成已修复声明。另有独立文档发现：[旧 OSS 依赖评估](oss-dependency-security-assessment.md)声称 Jackson `GHSA-mhm7-754m-9p8w` 已由 2.21.5 修复，而[主公告](https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-mhm7-754m-9p8w)仍列无修复版本。2026-09-13 已读取两份主公告复核此边界，本功能未解决该旧断言或完成新的全面安全评估。

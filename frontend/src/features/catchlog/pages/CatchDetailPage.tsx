@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../../shared/api/ApiError';
 import { isConfirmedUnauthorized } from '../../auth/api/currentUser';
@@ -26,12 +26,6 @@ function parseCatchId(value: string | undefined): number | undefined {
   return Number.isSafeInteger(id) && id > 0 ? id : undefined;
 }
 
-function isMissingCatch(error: unknown): boolean {
-  return error instanceof ApiError
-    && error.status === 404
-    && error.body.code === 'CATCH_RECORD_NOT_FOUND';
-}
-
 function measurements(catchRecord: CatchRecordDetail) {
   const values = [
     catchRecord.lengthCm === null ? null : `${catchRecord.lengthCm} cm`,
@@ -42,6 +36,24 @@ function measurements(catchRecord: CatchRecordDetail) {
 }
 
 export function CatchDetailPage() {
+  const { id } = useParams();
+  return <CatchDetailBoundary key={id} />;
+}
+
+function CatchDetailBoundary() {
+  const { id } = useParams();
+  const queryClient = useQueryClient();
+  const [terminalError, setTerminalError] = useState<number>();
+  const onReadFailure = useCallback((error: unknown) => {
+    if (!(error instanceof ApiError) || (error.status !== 403 && error.status !== 404)) return;
+    setTerminalError(error.status);
+    queryClient.removeQueries({ queryKey: catchDetailQueryKey(Number(id)), exact: true });
+  }, [id, queryClient]);
+  if (terminalError) return <main className={styles.page}><h1>{terminalError === 404 ? '没有找到钓获记录' : '没有照片访问权限'}</h1><Link to="/catches">返回钓获记录</Link></main>;
+  return <CatchDetail onReadFailure={onReadFailure} />;
+}
+
+function CatchDetail({ onReadFailure }: { onReadFailure: (error: unknown) => void }) {
   const { id: idParam } = useParams();
   const id = parseCatchId(idParam);
   const navigate = useNavigate();
@@ -74,14 +86,17 @@ export function CatchDetailPage() {
   });
 
   useEffect(() => {
+    onReadFailure(detailQuery.error);
     expireIfUnauthorized(detailQuery.error);
-  }, [detailQuery.error, expireIfUnauthorized]);
+  }, [detailQuery.error, expireIfUnauthorized, onReadFailure]);
 
   if (sessionExpired) {
     return <Navigate to="/login" replace />;
   }
 
-  if (id === undefined || isMissingCatch(detailQuery.error)) {
+  // The outer boundary owns terminal read errors and removes their cache.
+  if (detailQuery.error instanceof ApiError && (detailQuery.error.status === 403 || detailQuery.error.status === 404)) return null;
+  if (id === undefined) {
     return (
       <main className={styles.page}>
         <section className={styles.message} aria-live="polite">
@@ -150,6 +165,7 @@ export function CatchDetailPage() {
         revision={catchRecord.revision}
         hasPhoto={catchRecord.hasPhoto}
         photoAlt={`${catchRecord.commonNameZh}钓获照片`}
+        onReadFailure={onReadFailure}
       />
 
       {confirmingDelete ? (

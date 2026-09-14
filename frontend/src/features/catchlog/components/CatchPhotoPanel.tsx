@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { ApiError } from '../../../shared/api/ApiError';
 import {
@@ -14,7 +14,8 @@ import {
   removeCatchPhoto,
   validateCatchPhotoFile,
 } from '../api/catchPhotoApi';
-import { CATCHES_QUERY_KEY, catchDetailQueryKey, fetchCatchRecord } from '../api/catchRecordsApi';
+import { catchDetailQueryKey } from '../api/catchRecordsApi';
+import { invalidateOwnerPhotoConsumers, readOwnerPhotoState } from '../api/ownerPhotoState';
 import styles from './CatchPhotoPanel.module.css';
 
 type CatchPhotoPanelProps = {
@@ -22,6 +23,7 @@ type CatchPhotoPanelProps = {
   revision: string;
   hasPhoto: boolean;
   photoAlt: string;
+  onReadFailure?: (error: unknown) => void;
 };
 
 export function CatchPhotoPanel(props: CatchPhotoPanelProps) {
@@ -36,10 +38,14 @@ function OwnerPhotoPanel({
   revision,
   hasPhoto,
   photoAlt,
+  onReadFailure,
 }: CatchPhotoPanelProps) {
   const queryClient = useQueryClient();
   const { sessionExpired, expireIfUnauthorized } = useSessionExpiry();
   const inputRef = useRef<HTMLInputElement>(null);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const current = (generation: number) => mounted.current && isCurrentSessionGeneration(generation);
   const [reviewedRevision, setReviewedRevision] = useState(revision);
   const [selectedFile, setSelectedFile] = useState<File>();
   const [validationError, setValidationError] = useState<string>();
@@ -49,6 +55,16 @@ function OwnerPhotoPanel({
   const [actionError, setActionError] = useState<string>();
   const [refreshNeeded, setRefreshNeeded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [terminalError, setTerminalError] = useState<number>();
+
+  const handleReadFailure = (error: unknown) => {
+    if (expireIfUnauthorized(error)) return true;
+    if (!(error instanceof ApiError) || (error.status !== 403 && error.status !== 404)) return false;
+    setSelectedFile(undefined); setConfirmingRemove(undefined); setTerminalError(error.status);
+    queryClient.removeQueries({ queryKey: catchDetailQueryKey(recordId), exact: true });
+    onReadFailure?.(error);
+    return true;
+  };
 
   // Discard reviewed-state choices before rendering a different revision.
   // The keyed input below also clears the native file selection.
@@ -61,30 +77,25 @@ function OwnerPhotoPanel({
   }
 
   const refreshCurrentState = async (target: PhotoTarget, sessionGeneration: number) => {
-    if (!isCurrentSessionGeneration(sessionGeneration)) return;
+    if (!current(sessionGeneration)) return;
     setRefreshNeeded(true);
     setRefreshing(true);
     try {
-      const current = await fetchCatchRecord(target.recordId);
-      if (!isCurrentSessionGeneration(sessionGeneration)) return;
-      queryClient.setQueryData(catchDetailQueryKey(target.recordId), current);
-      await queryClient.invalidateQueries({
-        queryKey: CATCHES_QUERY_KEY,
-        predicate: (query) => query.queryKey[1] !== 'detail',
-      });
-      if (!isCurrentSessionGeneration(sessionGeneration)) return;
+      await invalidateOwnerPhotoConsumers(queryClient, target.recordId, true);
+      if (!current(sessionGeneration)) return;
+      const detail = await readOwnerPhotoState(queryClient, target.recordId, () => current(sessionGeneration));
+      if (!detail || !current(sessionGeneration)) return;
       setRefreshNeeded(false);
     } catch (error) {
-      if (!isCurrentSessionGeneration(sessionGeneration)) return;
-      if (expireIfUnauthorized(error)) return;
+      if (!current(sessionGeneration) || handleReadFailure(error)) return;
       setActionError((current) => current ?? '刷新照片状态失败，请刷新后再操作');
     } finally {
-      if (isCurrentSessionGeneration(sessionGeneration)) setRefreshing(false);
+      if (current(sessionGeneration)) setRefreshing(false);
     }
   };
 
   const handleError = async (error: unknown, target: PhotoTarget, sessionGeneration: number) => {
-    if (!isCurrentSessionGeneration(sessionGeneration)) return;
+    if (!current(sessionGeneration)) return;
     if (expireIfUnauthorized(error)) return;
     setConfirmingRemove(undefined);
     if (error instanceof ApiError && error.status === 409 && error.body.code === 'CATCH_PHOTO_CONFLICT') {
@@ -109,6 +120,7 @@ function OwnerPhotoPanel({
     onMutate: () => ({ sessionGeneration: captureSessionGeneration() }),
     onSuccess: async (_data, target, context) => {
       if (!context || !isCurrentSessionGeneration(context.sessionGeneration)) return;
+      if (!mounted.current) { await invalidateOwnerPhotoConsumers(queryClient, target.recordId, false); return; }
       setImageFailed(false);
       setSelectedFile(undefined);
       setActionError(undefined);
@@ -127,6 +139,7 @@ function OwnerPhotoPanel({
     onMutate: () => ({ sessionGeneration: captureSessionGeneration() }),
     onSuccess: async (_data, target, context) => {
       if (!context || !isCurrentSessionGeneration(context.sessionGeneration)) return;
+      if (!mounted.current) { await invalidateOwnerPhotoConsumers(queryClient, target.recordId, false); return; }
       setImageFailed(false);
       setConfirmingRemove(undefined);
       setActionError(undefined);
@@ -141,6 +154,7 @@ function OwnerPhotoPanel({
   if (sessionExpired) {
     return <Navigate to="/login" replace />;
   }
+  if (terminalError) return <section><h2>{terminalError === 404 ? '没有找到钓获记录' : '没有照片访问权限'}</h2></section>;
 
   const selectFile = (file: File | undefined) => {
     uploadMutation.reset();
