@@ -15,6 +15,13 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.StandardCopyOption;
+import java.lang.management.ManagementFactory;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -230,19 +237,95 @@ class FilesystemMediaStoreTest {
     @Test
     void objectRemainsInvisibleUntilBothFilesAreWritten() throws Exception {
         var store = new FilesystemMediaStore(root);
+        var observedBeforeMetadata = new AtomicBoolean();
         // Observe the exact intermediate state; filesystem watchers may coalesce short-lived entries.
         // Every filesystem operation still runs against the real temporary directory.
         try (var files = mockStatic(Files.class, CALLS_REAL_METHODS)) {
             files.when(() -> Files.writeString(any(Path.class), any(CharSequence.class),
                     eq(StandardCharsets.UTF_8), eq(StandardOpenOption.CREATE_NEW))).thenAnswer(invocation -> {
+                        observedBeforeMetadata.set(true);
                         assertThat(root.resolve(KEY)).doesNotExist();
                         assertThatThrownBy(() -> store.get(KEY)).isInstanceOf(CatchPhotoNotFoundException.class);
                         return invocation.callRealMethod();
                     });
             store.put(KEY, CONTENT, "image/jpeg");
         }
+        assertThat(observedBeforeMetadata).isTrue();
         assertThat(store.get(KEY).content()).containsExactly(CONTENT);
         assertThat(store.get(KEY).contentType()).isEqualTo("image/jpeg");
+        noTemporaryDirectories();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"put", "delete"})
+    void serializesOverlappingMutationsAcrossStoreInstances(String operation) throws Exception {
+        var firstStore = new FilesystemMediaStore(root);
+        var secondStore = new FilesystemMediaStore(root.toRealPath());
+        var publicationPending = new CountDownLatch(1);
+        var releasePublication = new CountDownLatch(1);
+        var firstResult = new FutureTask<Void>(() -> {
+            try (var files = mockStatic(Files.class, CALLS_REAL_METHODS)) {
+                files.when(() -> Files.move(any(Path.class), any(Path.class), eq(StandardCopyOption.ATOMIC_MOVE)))
+                        .thenAnswer(invocation -> {
+                            publicationPending.countDown();
+                            if (!releasePublication.await(10, TimeUnit.SECONDS))
+                                throw new AssertionError("Publication was not released");
+                            return invocation.callRealMethod();
+                        });
+                firstStore.put(KEY, CONTENT, "image/jpeg");
+            }
+            return null;
+        });
+        var secondResult = new FutureTask<RuntimeException>(() -> {
+            try {
+                if (operation.equals("put")) secondStore.put(KEY, new byte[] {7}, "image/png");
+                else secondStore.delete(KEY);
+                return null;
+            } catch (RuntimeException failure) {
+                return failure;
+            }
+        });
+        Thread first = new Thread(firstResult, "first-media-writer");
+        Thread second = new Thread(secondResult, "second-media-writer");
+        first.start();
+        try {
+            assertThat(publicationPending.await(5, TimeUnit.SECONDS)).isTrue();
+            second.start();
+            awaitBlockedByOrFinished(second, first);
+            assertThat(secondResult.isDone()).as("the second mutation must wait for publication").isFalse();
+        } finally {
+            releasePublication.countDown();
+            first.join(5_000);
+            second.join(5_000);
+        }
+        firstResult.get(5, TimeUnit.SECONDS);
+        if (operation.equals("put")) {
+            assertThat(secondResult.get(5, TimeUnit.SECONDS)).isInstanceOf(MediaStorageUnavailableException.class);
+            assertThat(firstStore.get(KEY).content()).containsExactly(CONTENT);
+            assertThat(firstStore.get(KEY).contentType()).isEqualTo("image/jpeg");
+        } else {
+            assertThat(secondResult.get(5, TimeUnit.SECONDS)).isNull();
+            assertThat(root.resolve(KEY)).doesNotExist();
+        }
+        noTemporaryDirectories();
+    }
+
+    @Test
+    void ioFailureStackTraceCannotRevealRawPathsOrKeys() throws Exception {
+        var store = new FilesystemMediaStore(root);
+        var raw = new IOException(root + "/sentinel-private-file " + KEY);
+        raw.addSuppressed(new IOException("sentinel-private-file"));
+        try (var files = mockStatic(Files.class, CALLS_REAL_METHODS)) {
+            files.when(() -> Files.writeString(any(Path.class), any(CharSequence.class),
+                    eq(StandardCharsets.UTF_8), eq(StandardOpenOption.CREATE_NEW))).thenThrow(raw);
+            assertThatThrownBy(() -> store.put(KEY, CONTENT, "image/jpeg"))
+                    .isInstanceOf(MediaStorageUnavailableException.class).hasNoCause()
+                    .satisfies(failure -> {
+                        var trace = new StringWriter();
+                        failure.printStackTrace(new PrintWriter(trace));
+                        assertThat(trace.toString()).doesNotContain(root.toString(), KEY, "sentinel-private-file");
+                    });
+        }
         noTemporaryDirectories();
     }
 
@@ -280,8 +363,20 @@ class FilesystemMediaStoreTest {
 
     private void unavailable(ThrowingCallable action, String key) {
         var assertion = assertThatThrownBy(action).isInstanceOf(MediaStorageUnavailableException.class)
-                .hasMessageNotContaining(root.toString()).hasMessageNotContaining("sentinel-private-file");
+                .hasNoCause().hasMessageNotContaining(root.toString()).hasMessageNotContaining("sentinel-private-file");
         if (key != null && !key.isEmpty()) assertion.hasMessageNotContaining(key);
+    }
+
+    private static void awaitBlockedByOrFinished(Thread waiter, Thread owner) throws Exception {
+        var threads = ManagementFactory.getThreadMXBean();
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (waiter.isAlive() && System.nanoTime() < deadline) {
+            var info = threads.getThreadInfo(waiter.threadId());
+            if (info != null && info.getThreadState() == Thread.State.BLOCKED
+                    && info.getLockOwnerId() == owner.threadId()) return;
+            Thread.sleep(1);
+        }
+        assertThat(waiter.isAlive()).as("writer must either finish or reach the active writer's lock").isFalse();
     }
 
     private void noTemporaryDirectories() throws Exception {

@@ -16,19 +16,34 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Arrays;
+import java.util.Objects;
 
+/**
+ * Private storage for one backend JVM. The protected directory must have no independent
+ * process or hostile local writer. All application mutations must use this class: JVM-wide
+ * locks coordinate its instances, while ATOMIC_MOVE publishes complete objects. Java does
+ * not offer portable atomic no-replace directory moves against an external writer.
+ */
 public final class FilesystemMediaStore implements MediaStore {
     static final long MAX_CONTENT_BYTES = 10L * 1024 * 1024;
     private static final Set<String> CONTENT_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
     private static final String CONTENT = "content";
     private static final String CONTENT_TYPE = "content-type";
     private static final int MAX_CONTENT_TYPE_BYTES = 10;
+    // Bounded stripes avoid retaining one lock forever for every uploaded object key.
+    private static final Object[] MUTATION_LOCKS = new Object[256];
+    static {
+        Arrays.setAll(MUTATION_LOCKS, ignored -> new Object());
+    }
     private final Path root;
 
     public FilesystemMediaStore(Path root) {
         try {
             if (root == null || !root.isAbsolute()) throw new IOException("Invalid media root");
-            this.root = root.normalize();
+            Path normalized = root.normalize();
+            requireDirectory(normalized);
+            this.root = normalized.toRealPath();
             requireDirectory(this.root);
             if (!Files.isReadable(this.root) || !Files.isWritable(this.root))
                 throw new IOException("Media root is unavailable");
@@ -39,6 +54,12 @@ public final class FilesystemMediaStore implements MediaStore {
 
     @Override
     public void put(String objectKey, byte[] content, String contentType) {
+        synchronized (mutationLock(objectKey)) {
+            putLocked(objectKey, content, contentType);
+        }
+    }
+
+    private void putLocked(String objectKey, byte[] content, String contentType) {
         Path temporary = null;
         try {
             if (content == null || content.length > MAX_CONTENT_BYTES
@@ -53,7 +74,7 @@ public final class FilesystemMediaStore implements MediaStore {
             Files.write(staging.resolve(CONTENT), content, StandardOpenOption.CREATE_NEW);
             Files.writeString(staging.resolve(CONTENT_TYPE), contentType,
                     StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
-            // Recheck immediately before publication; existing objects must never be overwritten.
+            // All cooperating put/delete calls hold the same lock through this check and move.
             resolveObject(objectKey);
             requireAbsent(target);
             Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
@@ -95,6 +116,12 @@ public final class FilesystemMediaStore implements MediaStore {
 
     @Override
     public void delete(String objectKey) {
+        synchronized (mutationLock(objectKey)) {
+            deleteLocked(objectKey);
+        }
+    }
+
+    private void deleteLocked(String objectKey) {
         try {
             Path target = resolveObject(objectKey);
             if (attributesIfPresent(target) == null) return;
@@ -114,6 +141,10 @@ public final class FilesystemMediaStore implements MediaStore {
         } catch (IOException | RuntimeException failure) {
             throw unavailable(failure);
         }
+    }
+
+    private Object mutationLock(String objectKey) {
+        return MUTATION_LOCKS[Math.floorMod(Objects.hash(root, objectKey), MUTATION_LOCKS.length)];
     }
 
     private Path resolveObject(String objectKey) throws IOException {
@@ -190,6 +221,7 @@ public final class FilesystemMediaStore implements MediaStore {
     }
 
     private static MediaStorageUnavailableException unavailable(Throwable cause) {
-        return new MediaStorageUnavailableException(cause);
+        // Even a logger printing the whole exception must not reveal paths from I/O causes.
+        return new MediaStorageUnavailableException();
     }
 }
