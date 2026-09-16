@@ -31,6 +31,7 @@ public record MediaProperties(
     @AssertTrue(message = "required media configuration is missing")
     public boolean isValidWhenEnabled() {
         return !enabled
+                || provider == MediaProvider.FILESYSTEM
                 || hasText(bucket) && (provider == MediaProvider.OSS
                         || hasText(endpoint) && hasText(accessKey) && hasText(secretKey));
     }

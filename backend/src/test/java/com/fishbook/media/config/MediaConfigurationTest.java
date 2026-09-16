@@ -8,14 +8,17 @@ import com.aliyun.oss.OSSClient;
 import com.aliyun.oss.common.comm.SignVersion;
 import com.fishbook.media.domain.MediaStore;
 import com.fishbook.media.persistence.DisabledMediaStore;
+import com.fishbook.media.persistence.FilesystemMediaStore;
 import com.fishbook.media.persistence.OssMediaStore;
 import com.fishbook.media.persistence.OssRoleCredentialsProvider;
 import io.minio.MinioClient;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
@@ -37,7 +40,8 @@ class MediaConfigurationTest {
     };
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-            .withUserConfiguration(MediaConfiguration.class, MinioConfiguration.class, OssConfiguration.class);
+            .withUserConfiguration(MediaConfiguration.class, MinioConfiguration.class,
+                    OssConfiguration.class, FilesystemConfiguration.class);
 
     @Test
     void disabledMediaUsesUnavailableStoreWithoutCreatingMinioClient() {
@@ -154,6 +158,34 @@ class MediaConfigurationTest {
                 .withPropertyValues(VALID_ENABLED_PROPERTIES.toArray(String[]::new))
                 .withPropertyValues(VALID_OSS_PROPERTIES)
                 .run(context -> assertThat(context).doesNotHaveBean(MinioClient.class));
+    }
+
+    @Test
+    void enabledFilesystemCreatesOnlyFilesystemStore(@TempDir Path root) {
+        contextRunner
+                .withPropertyValues(
+                        "fishbook.media.enabled=true",
+                        "fishbook.media.provider=filesystem",
+                        "fishbook.media.filesystem.root=" + root)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(MediaStore.class);
+                    assertThat(context.getBean(MediaStore.class))
+                            .isInstanceOf(FilesystemMediaStore.class);
+                    assertThat(context).doesNotHaveBean(MinioClient.class);
+                    assertThat(context).doesNotHaveBean(OSS.class);
+                    assertThat(context).doesNotHaveBean(OssRoleCredentialsProvider.class);
+                });
+    }
+
+    @Test
+    void enabledFilesystemFailsWhenRootDoesNotExist(@TempDir Path tempDir) {
+        contextRunner
+                .withPropertyValues(
+                        "fishbook.media.enabled=true",
+                        "fishbook.media.provider=filesystem",
+                        "fishbook.media.filesystem.root=" + tempDir.resolve("missing"))
+                .run(context -> assertThat(context).hasFailed());
     }
 
     @Test
