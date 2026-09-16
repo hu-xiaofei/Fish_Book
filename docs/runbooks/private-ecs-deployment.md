@@ -46,6 +46,29 @@ stat -c '%u:%g %a' /opt/fishbook/tls /opt/fishbook/tls/server.crt /opt/fishbook/
 helper 仅接受显式现有可写目录、拒绝覆盖，仅输出 SHA-256 指纹及到期时间。
 证书更新应另行准备并核对，不要删除现有密钥后盲目重跑。
 
+如果 helper 被中断或报告拒绝现有文件，先停止启动流程，并只检查文件存在状态：
+
+```bash
+for name in server.crt server.key; do
+  if test -e "/opt/fishbook/tls/$name" || test -L "/opt/fishbook/tls/$name"; then
+    printf '%s: present\n' "$name"
+  else
+    printf '%s: missing\n' "$name"
+  fi
+done
+```
+
+只存在其中一个文件即为部分 pair；两者都存在仍须检查它们是预期普通文件、所有权/权限正确，
+并在可信终端比较证书与私钥导出的公钥摘要是否一致（不要输出私钥内容）。helper 的无覆盖发布
+不是两个文件的联合原子操作，中断可能留下部分 pair。此时不要自动删除任意文件、重跑覆盖、
+清理 `.certificate.*` 或复用来源不明的文件。先人工核对本次运行记录、时间及是否有其他生成进程；
+无法确定归属即停止并报告。确认它们仅属于失败的本次生成且没有服务使用后，由运维在同一
+受保护目录中把已确认的单个文件移到一个明确的新隔离文件名，保留原权限和所有权，禁止覆盖
+已有隔离文件。确认 `server.crt` 和 `server.key` 均不存在，再按上面的 UID101 首次生成步骤
+临时开放目录写权限（现有目录使用 `chown 101:101 /opt/fishbook/tls` 及
+`chmod 0700 /opt/fishbook/tls`，不重复创建目录），重新运行 `setpriv` 生成命令，
+无论成功失败都恢复目录 root:root/0755；隔离文件保留等待人工处理。
+
 ## 隐藏输入配置
 
 不要把密码发到聊天、放在命令参数或提交到 Git。示例 env 只列变量，不能直接用于启动。
@@ -131,14 +154,28 @@ ssh -i /absolute/path/to/existing-key -o StrictHostKeyChecking=yes \
 检查猜测路径无法获取照片、替换/删除旧对象清理和本次操作无孤儿。
 核对 V1～V10 各一次且无失败，不修改未知用户数据。
 
-首次管理员确认登录后立即关闭 bootstrap，并仅重建一个后端，重新核对健康：
+首次管理员确认登录后立即关闭 bootstrap。Nginx 在启动时解析 backend 地址，后端重建可能
+改变容器 IP，因此必须先等唯一后端健康，再重建前端刷新地址，最后验证穿过 HTTPS 代理的
+精确 readiness 路径。以下整块在 ECS root Bash 执行，任一步失败即停止：
 
 ```bash
+(
+set -euo pipefail
 sed -i 's/^FISHBOOK_ADMIN_BOOTSTRAP_ENABLED=true$/FISHBOOK_ADMIN_BOOTSTRAP_ENABLED=false/' /opt/fishbook/config/fishbook.env
 bash deploy/private-ecs/verify-compose.sh /opt/fishbook/config/fishbook.env
-dc up -d --no-deps --force-recreate --wait --wait-timeout 180 backend
+dc up -d --no-build --no-deps --force-recreate --wait --wait-timeout 180 backend
+dc up -d --no-build --no-deps --force-recreate --wait --wait-timeout 180 frontend
+curl --fail --silent --show-error --connect-timeout 5 --max-time 15 --cacert /opt/fishbook/tls/server.crt \
+  https://localhost:8443/actuator/health/readiness | jq -e '.status == "UP"' >/dev/null
 dc ps
+)
 ```
+
+两个命令分别只重建一个指定服务，`--no-deps` 阻止前端命令再次启动或重建 backend；
+Compose 固定 backend 副本数为 1，不传入额外的缩放参数。前端重建或 HTTPS readiness
+失败时保持 bootstrap=false，保留数据及已健康的后端，停止前端并调查配置/解析错误。
+需要回滚应用时按下面的已验证版本流程处理；任何后端地址变更后仍须先等后端健康、
+再重建前端及复验精确 HTTPS readiness，不通过恢复 bootstrap=true 或启动第二个后端恢复服务。
 
 日志诊断先使用状态和错误计数，不把原始日志粘贴到聊天；日志可能包含身份信息或路径。
 以下只打印错误行数量。若需具体事件，须在受信任终端逐条脱敏，剔除密码、Cookie、Session、
@@ -156,7 +193,8 @@ dc up -d --no-build --wait --wait-timeout 180
 部署前在 `/opt/fishbook/releases` 记录已验证 Git SHA 和两个镜像 ID（仅记录标识，不保存配置或秘密），
 给上一版镜像打唯一保留标签。构建成功并不代表部署验收通过。新版本失败时停止新容器，
 保留照片与 env；确认数据库迁移兼容后，将两个已记录的旧镜像恢复到该项目构建标签，
-在旧的已验证提交工作树用同一 Compose 和 `up -d --no-build --wait` 启动，再做验收。
+在旧的已验证提交工作树用同一 Compose，先执行上述仅针对 backend 的重建并等待健康，
+再执行仅针对 frontend 的重建及精确 HTTPS readiness 验证，最后做业务验收。
 不要自动降级数据库、清理照片目录或删除旧镜像。旧版本不兼容新数据时保持停止并报告。
 
 少量学习照片仅存在 ECS 系统盘，磁盘损坏或释放可能导致永久丢失。公开域名/备案、公共可信
