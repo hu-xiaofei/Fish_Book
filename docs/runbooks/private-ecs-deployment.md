@@ -120,7 +120,7 @@ cd /opt/fishbook/app
 dc() {
   env -u MYSQL_PASSWORD -u FISHBOOK_ADMIN_BOOTSTRAP_ENABLED -u FISHBOOK_ADMIN_EMAIL \
     -u FISHBOOK_ADMIN_PASSWORD -u FISHBOOK_ADMIN_NICKNAME \
-    docker compose --env-file /opt/fishbook/config/fishbook.env \
+    docker compose --project-name fishbook-private-ecs --env-file /opt/fishbook/config/fishbook.env \
     -f /opt/fishbook/app/compose.private-ecs.yaml "$@"
 }
 bash deploy/private-ecs/verify-compose.sh /opt/fishbook/config/fishbook.env
@@ -190,12 +190,61 @@ dc up -d --no-build --wait --wait-timeout 180
 
 ## 版本与回滚
 
-部署前在 `/opt/fishbook/releases` 记录已验证 Git SHA 和两个镜像 ID（仅记录标识，不保存配置或秘密），
-给上一版镜像打唯一保留标签。构建成功并不代表部署验收通过。新版本失败时停止新容器，
-保留照片与 env；确认数据库迁移兼容后，将两个已记录的旧镜像恢复到该项目构建标签，
-在旧的已验证提交工作树用同一 Compose，先执行上述仅针对 backend 的重建并等待健康，
-再执行仅针对 frontend 的重建及精确 HTTPS readiness 验证，最后做业务验收。
-不要自动降级数据库、清理照片目录或删除旧镜像。旧版本不兼容新数据时保持停止并报告。
+每次升级前，在 `/opt/fishbook/releases` 保存上一版已完成业务验收的完整 Git SHA、backend
+和 frontend 的 `sha256:` 镜像 ID，并给这两个镜像打唯一保留标签，避免构建时丢失回滚来源。
+记录仅包含标识，不保存配置或秘密。构建成功不代表部署验收通过；首次部署在尚无已验证、
+数据库兼容且包含本部署栈的旧版本时，没有应用回滚目标，失败只能停止应用并保留现场。
+
+`/opt/fishbook/app` 是唯一部署 checkout，项目名固定为 `fishbook-private-ecs`。`dc` 使用该
+目录的绝对 Compose 路径，切换当前目录不会切换配置；禁止创建第二个工作树或项目来回滚。
+旧版本必须已经确认兼容当前数据库及照片数据，否则先停止应用并报告，不降级数据库。
+在已定义上述 `dc` 函数的 ECS root Bash 中，从已有发布记录输入三个标识后执行：
+
+```bash
+(
+set -euo pipefail
+cd /opt/fishbook/app
+test "$(git rev-parse --show-toplevel)" = /opt/fishbook/app
+if test -n "$(git status --porcelain --untracked-files=all)"; then
+  printf 'STOP: deployment checkout is dirty; preserve and review changes\n' >&2
+  exit 1
+fi
+failed_sha=$(git rev-parse HEAD)
+# No overwrite; record the failed source revision before switching it.
+(set -o noclobber; printf '%s\n' "$failed_sha" >"/opt/fishbook/releases/failed-$failed_sha-$(date -u +%Y%m%dT%H%M%SZ).txt")
+IFS= read -rp 'Previously verified full Git SHA: ' rollback_sha </dev/tty
+IFS= read -rp 'Recorded backend sha256 image ID: ' rollback_backend_id </dev/tty
+IFS= read -rp 'Recorded frontend sha256 image ID: ' rollback_frontend_id </dev/tty
+[[ "$rollback_sha" =~ ^[0-9a-f]{40}$ ]]
+[[ "$rollback_backend_id" =~ ^sha256:[0-9a-f]{64}$ ]]
+[[ "$rollback_frontend_id" =~ ^sha256:[0-9a-f]{64}$ ]]
+git cat-file -e "$rollback_sha^{commit}"
+git cat-file -e "$rollback_sha:compose.private-ecs.yaml"
+git cat-file -e "$rollback_sha:deploy/private-ecs/verify-compose.sh"
+test "$(docker image inspect --format '{{.Id}}' "$rollback_backend_id")" = "$rollback_backend_id"
+test "$(docker image inspect --format '{{.Id}}' "$rollback_frontend_id")" = "$rollback_frontend_id"
+dc stop
+# Changes only the same clean checkout, with no force/reset/discard operation.
+git switch --detach "$rollback_sha"
+test "$(git rev-parse HEAD)" = "$rollback_sha"
+bash /opt/fishbook/app/deploy/private-ecs/verify-compose.sh /opt/fishbook/config/fishbook.env
+docker image tag "$rollback_backend_id" fishbook-private-ecs-backend:latest
+docker image tag "$rollback_frontend_id" fishbook-private-ecs-frontend:latest
+test "$(docker image inspect --format '{{.Id}}' fishbook-private-ecs-backend:latest)" = "$rollback_backend_id"
+test "$(docker image inspect --format '{{.Id}}' fishbook-private-ecs-frontend:latest)" = "$rollback_frontend_id"
+dc up -d --no-build --no-deps --force-recreate --wait --wait-timeout 180 backend
+dc up -d --no-build --no-deps --force-recreate --wait --wait-timeout 180 frontend
+curl --fail --silent --show-error --connect-timeout 5 --max-time 15 --cacert /opt/fishbook/tls/server.crt \
+  https://localhost:8443/actuator/health/readiness | jq -e '.status == "UP"' >/dev/null
+dc ps
+)
+```
+
+标识必须来自此前已验证发布记录，不能猜测 SHA、把镜像标签当成身份或选取尚不含本部署栈的
+旧提交。上述镜像标签对应固定项目的两个默认构建标签；如果某个旧版本变更过服务名或镜像
+命名，先停止并核对其已记录配置，不直接套用命令。任何一步失败即停止后续步骤、保留现场，
+不得丢弃脏树、自动降级数据库、清理照片目录或删除旧镜像。HTTPS readiness 通过后仍须完成
+业务和照片权限验收，才记录为回滚成功；bootstrap 始终保持 false。
 
 少量学习照片仅存在 ECS 系统盘，磁盘损坏或释放可能导致永久丢失。公开域名/备案、公共可信
 HTTPS、正式备份恢复、SSH 来源限制与加固仍属后续工作。云端健康、迁移、权限及照片验收
