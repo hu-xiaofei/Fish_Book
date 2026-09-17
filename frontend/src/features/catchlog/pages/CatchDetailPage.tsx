@@ -75,6 +75,8 @@ function CatchDetail({ onReadFailure }: { onReadFailure: (error: unknown) => voi
       queryClient.removeQueries({ queryKey: catchDetailQueryKey(id as number), exact: true });
       await queryClient.invalidateQueries({ queryKey: CATCHES_QUERY_KEY });
       if (!isCurrentSessionGeneration(context.sessionGeneration)) return;
+      // An active observer can republish the detail while list invalidation is pending.
+      queryClient.removeQueries({ queryKey: catchDetailQueryKey(id as number), exact: true });
       navigate('/catches');
     },
     onError: (error, _variables, context) => {

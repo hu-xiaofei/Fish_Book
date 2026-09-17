@@ -308,6 +308,23 @@ test('requires an explicit confirmation before deleting', async () => {
   expect(queryClient.getQueryState(catchPageQueryKey(0))?.isInvalidated).toBe(true);
 });
 
+test('clears detail data republished while deletion waits for list invalidation', async () => {
+  const invalidating = deferred<void>();
+  deleteCatchRecordMock.mockResolvedValue(undefined);
+  const { user, queryClient } = renderCatchDetail({ cachedPrivateData: true });
+  const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(invalidating.promise);
+
+  await user.click(await screen.findByRole('button', { name: '删除记录' }));
+  await user.click(screen.getByRole('button', { name: '确认删除' }));
+  await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(1));
+
+  queryClient.setQueryData(catchDetailQueryKey(31), savedCatch);
+  invalidating.resolve();
+
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/catches$/));
+  expect(queryClient.getQueryData(catchDetailQueryKey(31))).toBeUndefined();
+});
+
 test('cancels deletion without changing the private record', async () => {
   const { user } = renderCatchDetail();
 
