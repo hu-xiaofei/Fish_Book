@@ -16,27 +16,100 @@ SSH 必须使用已有可信 known_hosts 和 `StrictHostKeyChecking=yes`；指�
 RDS 目标为 `rm-bp1pgdmw41u3i6r98.mysql.rds.aliyuncs.com:3306/fishbook`，
 普通账号为 `fishbook_app`。当前 `useSSL=false&allowPublicKeyRetrieval=false` 是已接受的
 非敏感学习数据例外：VPC 内网连接没有传输加密。正式业务或敏感数据必须启用 TLS 并验证服务端身份。
-首次启动前使用受信任终端的 MySQL 客户端 `--password` 隐藏提示进行只读认证，确认
-`DATABASE()`、当前账号和 `flyway_schema_history`。仅允许已审阅的 V1～V10 迁移；
+首次启动前必须完成下文的只读数据库对象与迁移预检。仅允许已审阅的 V1～V10 迁移；
 记录当前迁移版本，禁止清库、删表或手工降级。应用启动会运行 Flyway。
 
-## 首次目录和证书准备
+## 首次目录与固定提交
 
-以下操作在 ECS 的 root 终端执行。先逐项确认目录不存在，若已存在则检查归属和内容，
-不要递归改属主或覆盖文件。`/opt/fishbook/app` 为已核对提交的 Git 工作树。
+以下整块仅用于核实过的首次部署，在 ECS root Bash 终端执行。任何既有部署根目录（包括
+符号链接）都停止，需要人工确认现状后选择已有环境流程；不覆盖、不递归改属主。
+先创建父目录和数据目录，`app` 留给 clone 创建；按计划核对并准备交换空间后再 clone。
 
 ```bash
+(
+set -euo pipefail
+test "$(id -u)" -eq 0
+if test -e /opt/fishbook || test -L /opt/fishbook; then
+  printf 'STOP: deployment root already exists; inspect it before proceeding\n' >&2
+  exit 1
+fi
 install -d -m 0755 /opt/fishbook /opt/fishbook/releases /opt/fishbook/data
 install -d -m 0700 /opt/fishbook/config
 # 仅首次创建；之后照片目录由 UID 10001 独占，不再由其他进程写入。
-test ! -e /opt/fishbook/data/photos && install -d -o 10001 -g 10001 -m 0700 /opt/fishbook/data/photos
-test ! -e /opt/fishbook/tls && install -d -o 101 -g 101 -m 0700 /opt/fishbook/tls
+install -d -o 10001 -g 10001 -m 0700 /opt/fishbook/data/photos
+)
+```
+
+确认已有交换配置，不覆盖任何同名文件；若计划要求创建新交换文件，完成该步骤后，输入已通过
+完整 CI 的 40 位提交 SHA。这里必须 clone 到不存在的 `app`，不要预先创建非空目录或换工作树。
+
+```bash
+(
+set -euo pipefail
+if test -e /opt/fishbook/app || test -L /opt/fishbook/app; then
+  printf 'STOP: app path already exists\n' >&2
+  exit 1
+fi
+test -d /opt/fishbook/releases
+IFS= read -rp 'Exact CI-passing full Git SHA: ' release_sha </dev/tty
+[[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]
+git clone --no-checkout https://github.com/hu-xiaofei/Fish_Book.git /opt/fishbook/app
+cd /opt/fishbook/app
+git fetch origin main
+git cat-file -e "$release_sha^{commit}"
+git merge-base --is-ancestor "$release_sha" origin/main
+git switch --detach "$release_sha"
+test "$(git rev-parse HEAD)" = "$release_sha"
+checkout_status=$(git status --porcelain --untracked-files=all)
+test -z "$checkout_status"
+git cat-file -e HEAD:deploy/private-ecs/generate-certificate.sh
+(set -o noclobber; printf '%s\n' "$release_sha" >/opt/fishbook/releases/prepared-sha)
+)
+```
+
+`prepared-sha` 仅表示已准备源码，不表示部署验收成功。clone、SHA 核对或清洁检查失败时停止，
+保留现场，不运行下一节 helper。
+
+## 首次证书准备
+
+此时 helper 必须已来自上述固定提交。以下整块拒绝已有 TLS 路径，并在 helper 失败或收到
+可捕获的终止信号时恢复目录 root:root/0755；SIGKILL 或断电不能由 shell trap 恢复，重试前必须
+先人工检查并恢复目录。恢复失败会明确报错，不能继续启动。
+
+```bash
+(
+set -euo pipefail
+test -f /opt/fishbook/app/deploy/private-ecs/generate-certificate.sh
+if test -e /opt/fishbook/tls || test -L /opt/fishbook/tls; then
+  printf 'STOP: TLS path already exists; inspect it before proceeding\n' >&2
+  exit 1
+fi
+install -d -o root -g root -m 0755 /opt/fishbook/tls
+restore_tls_directory() {
+  result=$?
+  trap - EXIT
+  if ! chown root:root /opt/fishbook/tls; then
+    printf 'STOP: TLS directory owner restoration failed\n' >&2
+    result=1
+  fi
+  if ! chmod 0755 /opt/fishbook/tls; then
+    printf 'STOP: TLS directory mode restoration failed\n' >&2
+    result=1
+  fi
+  exit "$result"
+}
+trap restore_tls_directory EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+chown 101:101 /opt/fishbook/tls
+chmod 0700 /opt/fishbook/tls
 setpriv --reuid=101 --regid=101 --clear-groups \
   env FISHBOOK_TLS_DIR=/opt/fishbook/tls \
   bash /opt/fishbook/app/deploy/private-ecs/generate-certificate.sh
 chown root:root /opt/fishbook/tls
 chmod 0755 /opt/fishbook/tls
 stat -c '%u:%g %a' /opt/fishbook/tls /opt/fishbook/tls/server.crt /opt/fishbook/tls/server.key
+)
 ```
 
 预期目录 `0:0 755`、证书 `101:101 644`、私钥 `101:101 600`。前端 UID/GID 101
@@ -111,24 +184,79 @@ awk -F= '/^[A-Z_]+=/ {v=substr($0,index($0,"=")+1); print $1 ": " ((v!="" && v!=
 仓库 verifier 将渲染结果保存在 0600 临时文件，退出时清理，失败只打印规则名。
 宿主 root 和 Docker 管理权限仍可读取容器配置中的秘密，必须限制这些权限。
 
+## 只读数据库预检
+
+在受信任终端使用 MySQL 8.4 客户端；`--password` 每次提示均隐藏输入，不从聊天或命令参数
+传密码。先用 `SHOW GRANTS FOR CURRENT_USER()` 检查普通账号对整个 `fishbook` schema
+的有效权限，确认 tables/views、routines、triggers、events 元数据完整可见；权限不足或无法
+确认可见性时停止并核查授权，不能把信息架构的可见子集当成完整空库。不要自行扩大权限。
+以下只查询身份、对象计数和迁移元数据，不读取应用行；连接、权限、查询错误与空库严格区分。
+
+```bash
+(
+set +x
+set -euo pipefail
+mysql_readonly() {
+  mysql --host=rm-bp1pgdmw41u3i6r98.mysql.rds.aliyuncs.com --port=3306 \
+    --user=fishbook_app --database=fishbook --ssl-mode=DISABLED --connect-timeout=5 \
+    --password --batch --skip-column-names --execute="$1"
+}
+# Complete the effective-grants review above before running this block.
+metadata=$(mysql_readonly "SELECT DATABASE(), CURRENT_USER(),
+  (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()),
+  (SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE()),
+  (SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE()),
+  (SELECT COUNT(*) FROM information_schema.EVENTS WHERE EVENT_SCHEMA = DATABASE()),
+  (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'flyway_schema_history' AND TABLE_TYPE = 'BASE TABLE');")
+[[ "$metadata" != *$'\n'* ]]
+IFS=$'\t' read -r database db_user tables routines triggers events flyway <<<"$metadata"
+test "$database" = fishbook
+[[ "$db_user" == fishbook_app@* ]]
+for count in "$tables" "$routines" "$triggers" "$events" "$flyway"; do
+  [[ "$count" =~ ^[0-9]+$ ]]
+done
+printf 'schema=%s tables_and_views=%s routines=%s triggers=%s events=%s flyway_tables=%s\n' \
+  "$database" "$tables" "$routines" "$triggers" "$events" "$flyway"
+if test "$flyway" -eq 1; then
+  mysql_readonly 'SELECT installed_rank, version, description, success FROM flyway_schema_history ORDER BY installed_rank;'
+elif test "$flyway" -eq 0 && test "$((tables + routines + triggers + events))" -eq 0; then
+  printf 'PASS: confirmed empty schema; no Flyway table yet\n'
+else
+  printf 'STOP: schema is non-empty without a valid Flyway history table\n' >&2
+  exit 1
+fi
+)
+```
+
+有 Flyway 表时只查看上述迁移元数据，人工核对是否仅有允许的版本且全部成功；异常、未知版本
+或失败行即停止，不修表或重置历史。无 Flyway 表仅在四类对象计数总和为零且可见性已确认时
+视为首次空库。任何命令非零退出或输出无法解析都不是“空库”，不得继续构建启动。
+
 ## 构建、启动和状态
 
 保持一个 root Bash 终端，定义固定项目命令，避免环境变量覆盖文件中的值：
 
 ```bash
-cd /opt/fishbook/app
 dc() {
   env -u MYSQL_PASSWORD -u FISHBOOK_ADMIN_BOOTSTRAP_ENABLED -u FISHBOOK_ADMIN_EMAIL \
     -u FISHBOOK_ADMIN_PASSWORD -u FISHBOOK_ADMIN_NICKNAME \
     docker compose --project-name fishbook-private-ecs --env-file /opt/fishbook/config/fishbook.env \
     -f /opt/fishbook/app/compose.private-ecs.yaml "$@"
 }
+(
+set -euo pipefail
+cd /opt/fishbook/app
 bash deploy/private-ecs/verify-compose.sh /opt/fishbook/config/fishbook.env
-dc build
+dc build backend frontend
 # Only after successful builds and the database preflight above:
-dc up -d --wait --wait-timeout 180
+dc up -d --no-build --no-deps --wait --wait-timeout 180 backend
+dc up -d --no-build --no-deps --force-recreate --wait --wait-timeout 180 frontend
+curl --fail --silent --show-error --connect-timeout 5 --max-time 15 --cacert /opt/fishbook/tls/server.crt \
+  https://localhost:8443/actuator/health/readiness | jq -e '.status == "UP"' >/dev/null
 dc ps
 ss -lnt
+)
 ```
 
 前端仅发布 `127.0.0.1:8443`，backend 不发布宿主端口。两容器都有健康检查、
@@ -205,7 +333,8 @@ dc up -d --no-build --wait --wait-timeout 180
 set -euo pipefail
 cd /opt/fishbook/app
 test "$(git rev-parse --show-toplevel)" = /opt/fishbook/app
-if test -n "$(git status --porcelain --untracked-files=all)"; then
+checkout_status=$(git status --porcelain --untracked-files=all)
+if test -n "$checkout_status"; then
   printf 'STOP: deployment checkout is dirty; preserve and review changes\n' >&2
   exit 1
 fi

@@ -362,11 +362,13 @@ Run Alibaba Cloud Linux security-only updates. Record package names/count withou
 
 - [ ] **Step 3: Create scoped directories and swap**
 
-Create only the paths listed above. If no swap exists and `/opt/fishbook/swapfile` is absent, allocate 2 GiB, mode `0600`, run `mkswap`/`swapon`, and append exactly one validated fstab entry. Set photo directory ownership to `10001:10001` and mode `0700`. Create the empty TLS directory as `101:101`, run the certificate helper as UID/GID 101, then set the directory to `root:root` and `0755` without changing the key owner/mode; record only certificate fingerprint/expiry.
+Follow the runbook's fail-fast first-install directory block: refuse an existing or ambiguous deployment root, create only `/opt/fishbook` and its `releases`, `config`, `data`, and `data/photos` directories, and leave `/opt/fishbook/app` absent for clone. Set photos to `10001:10001`, mode `0700`. Do not create TLS files or invoke an uninstalled helper yet. If no swap exists and `/opt/fishbook/swapfile` is absent, allocate 2 GiB, mode `0600`, run `mkswap`/`swapon`, and append exactly one validated fstab entry; stop on any ambiguous existing resource. Do not overwrite or recursively change ownership of existing paths.
 
 - [ ] **Step 4: Clone and pin the verified release**
 
-Clone the public repository into `/opt/fishbook/app`, fetch `main`, verify the exact CI-passing SHA, and detach at that SHA for deployment. Refuse a dirty working tree. Record the SHA in `/opt/fishbook/releases/current` and do not place credentials in Git configuration.
+Use the runbook's executable clone/pin block only after base-directory/swap preparation. Refuse any existing `/opt/fishbook/app` path, clone the public repository into that absent path, fetch `main`, verify the exact CI-passing SHA belongs to it, detach that same checkout at the exact SHA, and verify HEAD. Assign `git status` output separately so command failure propagates, then refuse dirty state. Record the prepared SHA without overwriting an existing record; this is not a successful-deployment marker. Do not place credentials in Git configuration or create another deployment checkout/project.
+
+Only now invoke the certificate helper from that verified committed checkout. Follow the runbook's separate fail-fast TLS block: refuse any existing TLS path, create the directory under root ownership, install an EXIT/signal cleanup trap before granting UID/GID 101 write access, and run the helper as `101:101`. The trap must restore the directory to `root:root` and `0755` on helper failure as well as success, without changing the key's `101:101`/`0600`; a restore failure stops deployment. SIGKILL/power loss requires manual directory inspection and restoration before retry. Record only certificate fingerprint/expiry.
 
 - [ ] **Step 5: Pause for secure user input**
 
@@ -374,19 +376,26 @@ Ask the user to run the runbook's hidden-input block in Alibaba Workbench to wri
 
 - [ ] **Step 6: Verify RDS identity before migration**
 
-Run a disposable MySQL 8.4 client container on the normal bridge network with the env file, querying only:
+Use the runbook's fail-fast read-only MySQL 8.4 client preflight in a trusted terminal, with hidden `--password` input (never a password argument or a raw env/config dump). Review `SHOW GRANTS FOR CURRENT_USER()` first to confirm metadata visibility over the entire `fishbook` schema, including routines/triggers/events; insufficient or uncertain visibility is a blocker, not proof of an empty schema. Do not broaden grants during this preflight. Query identity and object counts before deciding whether the Flyway query is valid:
 
 ```sql
-SELECT DATABASE(), CURRENT_USER(), @@hostname, @@version;
+SELECT DATABASE(), CURRENT_USER(),
+  (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()),
+  (SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE()),
+  (SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE()),
+  (SELECT COUNT(*) FROM information_schema.EVENTS WHERE EVENT_SCHEMA = DATABASE()),
+  (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'flyway_schema_history' AND TABLE_TYPE = 'BASE TABLE');
+-- Run only when the previous query proves that exactly one Flyway base table exists:
 SELECT installed_rank, version, description, success
 FROM flyway_schema_history ORDER BY installed_rank;
 ```
 
-The first query must show database `fishbook` and ordinary `fishbook_app`; an absent Flyway table is acceptable only for an empty first deployment. Do not list application rows or print the password.
+The first result must identify database `fishbook` and ordinary `fishbook_app`, with well-formed numeric counts. TABLES counts include both tables and views. An absent Flyway table is acceptable only when the sum of tables/views, routines, triggers, and events is zero and visibility is confirmed. Nonzero objects without Flyway, failed connection/permission/query, or malformed output must stop deployment. Never catch a failed query and substitute zero counts. When Flyway exists, query only its migration metadata and require reviewed versions with no failed/unknown entry before startup. Do not list application rows or print the password.
 
 - [ ] **Step 7: Build and start**
 
-Run the committed Compose verifier, build both images, and inspect image history/config for secret values before startup. Run `docker compose --env-file /opt/fishbook/config/fishbook.env -f compose.private-ecs.yaml up -d`. Wait on health conditions instead of sleeping a fixed interval. Confirm only `127.0.0.1:8443` is newly listening and no backend/database/storage port is published.
+Use the runbook's fixed-project `dc` function and fail-fast `set -euo pipefail` block. Run the committed Compose verifier, then `dc build backend frontend`; either failure must prevent all startup. Inspect image history/config for secret leakage using checks that do not print raw configuration or secret values. Only after verification, both builds, and preflight succeed, start backend with `--no-build --no-deps --wait`, then force-recreate frontend with `--no-build --no-deps --wait` to refresh the backend address. Validate exact HTTPS `/actuator/health/readiness` using the public certificate and require status UP. Keep the single `fishbook-private-ecs` project and one backend/JVM. Confirm only `127.0.0.1:8443` is newly listening and no backend/database/storage port is published.
 
 - [ ] **Step 8: Verify migrations and logs**
 
