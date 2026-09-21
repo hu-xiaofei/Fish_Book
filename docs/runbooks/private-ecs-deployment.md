@@ -219,7 +219,20 @@ done
 printf 'schema=%s tables_and_views=%s routines=%s triggers=%s events=%s flyway_tables=%s\n' \
   "$database" "$tables" "$routines" "$triggers" "$events" "$flyway"
 if test "$flyway" -eq 1; then
-  mysql_readonly 'SELECT installed_rank, version, description, success FROM flyway_schema_history ORDER BY installed_rank;'
+  # Preserve trailing newlines so malformed blank rows cannot disappear in command substitution.
+  migration_metadata=$(mysql_readonly 'SELECT installed_rank, version, success FROM flyway_schema_history ORDER BY installed_rank;' && printf '.')
+  migration_metadata=${migration_metadata%.}
+  # The reviewed migration filenames are V1__*.sql through V10__*.sql, each exactly once.
+  # A non-empty contiguous prefix permits Flyway to apply the remaining reviewed migrations.
+  if ! printf '%s' "$migration_metadata" | awk -F '\t' '
+    NF != 3 || $1 !~ /^[1-9][0-9]*$/ || $2 !~ /^[1-9][0-9]*$/ || $3 !~ /^1$/ {bad=1}
+    $1 != NR || $2 != NR || NR > 10 {bad=1}
+    END {exit (bad || NR < 1)}'; then
+    printf 'FAIL: reviewed_flyway_history\n' >&2
+    exit 1
+  fi
+  unset migration_metadata
+  printf 'PASS: reviewed_flyway_history\n'
 elif test "$flyway" -eq 0 && test "$((tables + routines + triggers + events))" -eq 0; then
   printf 'PASS: confirmed empty schema; no Flyway table yet\n'
 else
@@ -229,8 +242,10 @@ fi
 )
 ```
 
-有 Flyway 表时只查看上述迁移元数据，人工核对是否仅有允许的版本且全部成功；异常、未知版本
-或失败行即停止，不修表或重置历史。无 Flyway 表仅在四类对象计数总和为零且可见性已确认时
+有 Flyway 表时自动验证三列迁移元数据：只接受非空的 V1～VN 连续前缀（1 ≤ N ≤ 10），
+installed_rank 与 version 均从 1 连续递增、每项仅一次、success 全为 1。允许 V1～V9 等
+旧版前缀由启动时 Flyway 继续迁移；拒绝缺中间项、重复、乱序、空/非数字/未知版本、失败行、
+空输出及畸形列，不输出原始迁移行，不修表或重置历史。无 Flyway 表仅在四类对象计数总和为零且可见性已确认时
 视为首次空库。任何命令非零退出或输出无法解析都不是“空库”，不得继续构建启动。
 
 ## 构建、启动和状态
@@ -245,10 +260,12 @@ dc() {
     -f /opt/fishbook/app/compose.private-ecs.yaml "$@"
 }
 (
+set +x
 set -euo pipefail
 cd /opt/fishbook/app
 bash deploy/private-ecs/verify-compose.sh /opt/fishbook/config/fishbook.env
 dc build backend frontend
+bash deploy/private-ecs/verify-image-secrets.sh /opt/fishbook/config/fishbook.env
 # Only after successful builds and the database preflight above:
 dc up -d --no-build --no-deps --wait --wait-timeout 180 backend
 dc up -d --no-build --no-deps --force-recreate --wait --wait-timeout 180 frontend
@@ -258,6 +275,13 @@ dc ps
 ss -lnt
 )
 ```
+
+镜像检查是两个 `up` 之前的硬门槛。helper 检查固定项目刚构建的 backend/frontend 镜像，
+从上述单引号格式的受保护 env 文件读取数据库和 bootstrap 密码，不执行文件、不把秘密传为
+命令参数。完整 image inspect 和未截断 history 只写入 0600 临时文件，JSON 解码后逐个检查
+字符串与字段名；输出仅为 PASS/FAIL 规则名。任一镜像含任一密码、配置不可解析或检查命令失败
+都会停止启动；退出/可捕获信号清理本次临时文件。SIGKILL/断电后须由运维检查受保护的遗留
+临时目录。该检查针对原值出现在镜像元数据的泄漏，不替代镜像文件层或编码/变形秘密的审计。
 
 前端仅发布 `127.0.0.1:8443`，backend 不发布宿主端口。两容器都有健康检查、
 `unless-stopped` 和 `json-file` 日志轮转（10 MiB × 3）。前端检查本容器 HTTPS 页面，

@@ -219,6 +219,7 @@ git commit -m "feat: store private photos on filesystem"
 - Create: `deploy/private-ecs/fishbook.env.example`
 - Create: `deploy/private-ecs/generate-certificate.sh`
 - Create: `deploy/private-ecs/verify-compose.sh`
+- Create: `deploy/private-ecs/verify-image-secrets.sh`
 - Create: `docs/runbooks/private-ecs-deployment.md`
 
 **Interfaces:**
@@ -387,15 +388,15 @@ SELECT DATABASE(), CURRENT_USER(),
   (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()
     AND TABLE_NAME = 'flyway_schema_history' AND TABLE_TYPE = 'BASE TABLE');
 -- Run only when the previous query proves that exactly one Flyway base table exists:
-SELECT installed_rank, version, description, success
+SELECT installed_rank, version, success
 FROM flyway_schema_history ORDER BY installed_rank;
 ```
 
-The first result must identify database `fishbook` and ordinary `fishbook_app`, with well-formed numeric counts. TABLES counts include both tables and views. An absent Flyway table is acceptable only when the sum of tables/views, routines, triggers, and events is zero and visibility is confirmed. Nonzero objects without Flyway, failed connection/permission/query, or malformed output must stop deployment. Never catch a failed query and substitute zero counts. When Flyway exists, query only its migration metadata and require reviewed versions with no failed/unknown entry before startup. Do not list application rows or print the password.
+The first result must identify database `fishbook` and ordinary `fishbook_app`, with well-formed numeric counts. TABLES counts include both tables and views. An absent Flyway table is acceptable only when the sum of tables/views, routines, triggers, and events is zero and visibility is confirmed. Nonzero objects without Flyway, failed connection/permission/query, or malformed output must stop deployment. Never catch a failed query and substitute zero counts. When Flyway exists, capture only the three migration metadata columns and automatically require a non-empty contiguous V1..VN prefix, where 1 <= N <= 10, matching the reviewed `V1__*.sql` through `V10__*.sql` files. Both rank and version must be canonical positive integers equal to the row number and every success must be exactly 1. Reject missing intermediate entries, duplicates, out-of-order rows, blank/non-numeric/unknown versions, failed entries, malformed columns and empty output with nonzero status. A valid older prefix permits startup to apply the remaining reviewed migrations; post-start acceptance still requires V1..V10. Print only the validation rule result, never raw migration rows, application rows or the password.
 
 - [ ] **Step 7: Build and start**
 
-Use the runbook's fixed-project `dc` function and fail-fast `set -euo pipefail` block. Run the committed Compose verifier, then `dc build backend frontend`; either failure must prevent all startup. Inspect image history/config for secret leakage using checks that do not print raw configuration or secret values. Only after verification, both builds, and preflight succeed, start backend with `--no-build --no-deps --wait`, then force-recreate frontend with `--no-build --no-deps --wait` to refresh the backend address. Validate exact HTTPS `/actuator/health/readiness` using the public certificate and require status UP. Keep the single `fishbook-private-ecs` project and one backend/JVM. Confirm only `127.0.0.1:8443` is newly listening and no backend/database/storage port is published.
+Use the runbook's fixed-project `dc` function and fail-fast `set -euo pipefail` block with xtrace disabled. Run the committed Compose verifier, then `dc build backend frontend`, then the committed `verify-image-secrets.sh /opt/fishbook/config/fishbook.env` in the same subshell; any failure must prevent both startup commands. The image helper reads the literal database/bootstrap passwords from the protected single-quoted env format without sourcing it or placing secrets in arguments. It captures full inspect JSON and untruncated history for both fixed-project build tags in 0600 temporary files, decodes JSON strings/keys to check both secret values, prints only PASS/FAIL rule names, and traps cleanup. Failed metadata commands, malformed/empty metadata or a matched password must fail closed. This checks literal secrets in metadata, not image file layers or encoded/transformed secrets. Only after verification, both builds, the image gate and database preflight succeed, start backend with `--no-build --no-deps --wait`, then force-recreate frontend with `--no-build --no-deps --wait` to refresh the backend address. Validate exact HTTPS `/actuator/health/readiness` using the public certificate and require status UP. Keep the single `fishbook-private-ecs` project and one backend/JVM. Confirm only `127.0.0.1:8443` is newly listening and no backend/database/storage port is published.
 
 - [ ] **Step 8: Verify migrations and logs**
 
