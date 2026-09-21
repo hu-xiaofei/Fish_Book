@@ -14,8 +14,11 @@ SSH 必须使用已有可信 known_hosts 和 `StrictHostKeyChecking=yes`；指�
 系统更新若要求重启，先报告影响并安排重启，不自动重启服务器。
 
 RDS 目标为 `rm-bp1pgdmw41u3i6r98.mysql.rds.aliyuncs.com:3306/fishbook`，
-普通账号为 `fishbook_app`。当前 `useSSL=false&allowPublicKeyRetrieval=false` 是已接受的
-非敏感学习数据例外：VPC 内网连接没有传输加密。正式业务或敏感数据必须启用 TLS 并验证服务端身份。
+普通账号为 `fishbook_app`。该账号使用 `caching_sha2_password`；在已接受的非敏感学习环境
+非 TLS 例外下，MySQL 客户端需使用 `--get-server-public-key`，Connector/J 需设置
+`allowPublicKeyRetrieval=true`，才能通过 RSA 加密交换登录密码。服务器公钥来自当前连接，
+未经过身份验证；仅适用于同一 VPC 的非敏感学习数据。这不会加密后续数据库流量，
+也不能防止能够劫持内网连接的攻击者冒充 RDS。正式业务或敏感数据必须启用 TLS 并验证服务端身份。
 首次启动前必须完成下文的只读数据库对象与迁移预检。仅允许已审阅的 V1～V10 迁移；
 记录当前迁移版本，禁止清库、删表或手工降级。应用启动会运行 Flyway。
 
@@ -198,7 +201,7 @@ set +x
 set -euo pipefail
 mysql_readonly() {
   mysql --host=rm-bp1pgdmw41u3i6r98.mysql.rds.aliyuncs.com --port=3306 \
-    --user=fishbook_app --database=fishbook --ssl-mode=DISABLED --connect-timeout=5 \
+    --user=fishbook_app --database=fishbook --ssl-mode=DISABLED --get-server-public-key --connect-timeout=5 \
     --password --batch --skip-column-names --execute="$1"
 }
 # Complete the effective-grants review above before running this block.

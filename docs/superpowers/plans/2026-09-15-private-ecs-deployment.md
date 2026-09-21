@@ -259,7 +259,7 @@ Place the `ARG` immediately before the runtime-stage copy; the default preserves
 Define builds from `./backend` and `./frontend`, with frontend build arg `NGINX_CONFIG=nginx.private-ecs.conf`. Use these backend settings:
 
 ```yaml
-SPRING_DATASOURCE_URL: "jdbc:mysql://rm-bp1pgdmw41u3i6r98.mysql.rds.aliyuncs.com:3306/fishbook?connectionTimeZone=UTC&useSSL=false&allowPublicKeyRetrieval=false"
+SPRING_DATASOURCE_URL: "jdbc:mysql://rm-bp1pgdmw41u3i6r98.mysql.rds.aliyuncs.com:3306/fishbook?connectionTimeZone=UTC&useSSL=false&allowPublicKeyRetrieval=true"
 SPRING_DATASOURCE_USERNAME: fishbook_app
 SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
 FISHBOOK_MEDIA_ENABLED: "true"
@@ -377,7 +377,7 @@ Ask the user to run the runbook's hidden-input block in Alibaba Workbench to wri
 
 - [ ] **Step 6: Verify RDS identity before migration**
 
-Use the runbook's fail-fast read-only MySQL 8.4 client preflight in a trusted terminal, with hidden `--password` input (never a password argument or a raw env/config dump). Review `SHOW GRANTS FOR CURRENT_USER()` first to confirm metadata visibility over the entire `fishbook` schema, including routines/triggers/events; insufficient or uncertain visibility is a blocker, not proof of an empty schema. Do not broaden grants during this preflight. Query identity and object counts before deciding whether the Flyway query is valid:
+Use the runbook's fail-fast read-only MySQL 8.4 client preflight in a trusted terminal, with hidden `--password` input (never a password argument or a raw env/config dump). The confirmed `caching_sha2_password` account requires `--get-server-public-key` for the accepted non-TLS VPC-only learning connection; this RSA exchange protects the login password but neither authenticates the fetched key nor encrypts subsequent SQL. Review `SHOW GRANTS FOR CURRENT_USER()` first to confirm metadata visibility over the entire `fishbook` schema, including routines/triggers/events; insufficient or uncertain visibility is a blocker, not proof of an empty schema. Do not broaden grants during this preflight. Query identity and object counts before deciding whether the Flyway query is valid:
 
 ```sql
 SELECT DATABASE(), CURRENT_USER(),

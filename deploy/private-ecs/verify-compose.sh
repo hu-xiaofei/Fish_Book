@@ -29,6 +29,6 @@ check private_photo_mount '.services.backend.volumes | length == 1 and any(.type
 check readonly_tls_mount '.services.frontend.volumes | length == 1 and any(.type == "bind" and .source == "/opt/fishbook/tls" and .target == "/etc/fishbook/tls" and .read_only == true and (.bind.create_host_path // false) == false)'
 check filesystem_provider '.services.backend.environment | .FISHBOOK_MEDIA_ENABLED == "true" and .FISHBOOK_MEDIA_PROVIDER == "filesystem" and .FISHBOOK_MEDIA_FILESYSTEM_ROOT == "/data/photos"'
 check secure_cookie '.services.backend.environment.SERVER_SERVLET_SESSION_COOKIE_SECURE == "true"'
-check internal_rds_learning_endpoint '.services.backend.environment | .SPRING_DATASOURCE_USERNAME == "fishbook_app" and .SPRING_DATASOURCE_URL == "jdbc:mysql://rm-bp1pgdmw41u3i6r98.mysql.rds.aliyuncs.com:3306/fishbook?connectionTimeZone=UTC&useSSL=false&allowPublicKeyRetrieval=false"'
+check internal_rds_learning_endpoint '.services.backend.environment | .SPRING_DATASOURCE_USERNAME == "fishbook_app" and .SPRING_DATASOURCE_URL == "jdbc:mysql://rm-bp1pgdmw41u3i6r98.mysql.rds.aliyuncs.com:3306/fishbook?connectionTimeZone=UTC&useSSL=false&allowPublicKeyRetrieval=true"'
 check restart_health_logs 'all(.services[]; .restart == "unless-stopped" and (.healthcheck.disable // false) == false and (.healthcheck.test | length > 1) and .healthcheck.test[0] != "NONE" and .logging.driver == "json-file" and .logging.options["max-size"] == "10m" and .logging.options["max-file"] == "3")'
 printf 'PASS: private_ecs_compose\n'
