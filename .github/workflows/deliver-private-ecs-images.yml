@@ -1,0 +1,29 @@
+name: Deliver private ECS images
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build backend image for ECS
+        run: docker build --platform linux/amd64 --tag fishbook-private-ecs-backend:latest ./backend
+      - name: Build frontend image for ECS
+        run: docker build --platform linux/amd64 --build-arg NGINX_CONFIG=nginx.private-ecs.conf --tag fishbook-private-ecs-frontend:latest ./frontend
+      - name: Package images with checksum
+        run: |
+          docker save fishbook-private-ecs-backend:latest fishbook-private-ecs-frontend:latest | gzip -1 > fishbook-images.tar.gz
+          sha256sum fishbook-images.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fishbook-private-ecs-images-${{ github.sha }}
+          path: |
+            fishbook-images.tar.gz
+            SHA256SUMS
+          if-no-files-found: error
+          retention-days: 3
