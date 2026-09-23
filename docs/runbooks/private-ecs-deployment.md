@@ -17,6 +17,8 @@ RDS 目标为 `rm-bp1pgdmw41u3i6r98.mysql.rds.aliyuncs.com:3306/fishbook`，
 普通账号为 `fishbook_app`。该账号使用 `caching_sha2_password`；在已接受的非敏感学习环境
 非 TLS 例外下，MySQL 客户端需使用 `--get-server-public-key`，Connector/J 需设置
 `allowPublicKeyRetrieval=true`，才能通过 RSA 加密交换登录密码。服务器公钥来自当前连接，
+连接同时使用 `sessionVariables=explicit_defaults_for_timestamp=ON`，仅为应用自己的数据库会话
+启用显式时间戳默认行为，避免受 RDS 兼容参数影响；不修改 RDS 全局参数。
 未经过身份验证；仅适用于同一 VPC 的非敏感学习数据。这不会加密后续数据库流量，
 也不能防止能够劫持内网连接的攻击者冒充 RDS。正式业务或敏感数据必须启用 TLS 并验证服务端身份。
 首次启动前必须完成下文的只读数据库对象与迁移预检。仅允许已审阅的 V1～V10 迁移；

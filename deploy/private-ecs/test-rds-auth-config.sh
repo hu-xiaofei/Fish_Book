@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Regression: a non-TLS caching_sha2_password connection must support RSA password exchange.
+# Regression: a non-TLS RDS connection must support RSA password exchange and
+# opt into explicit TIMESTAMP defaults for this connection only.
 set -euo pipefail
 umask 077
 
@@ -20,9 +21,9 @@ docker compose --env-file "$env_file" -f "$root/compose.private-ecs.yaml" \
 
 if ! jq -e '
   .services.backend.environment.SPRING_DATASOURCE_URL ==
-  "jdbc:mysql://rm-bp1pgdmw41u3i6r98.mysql.rds.aliyuncs.com:3306/fishbook?connectionTimeZone=UTC&useSSL=false&allowPublicKeyRetrieval=true"
+  "jdbc:mysql://rm-bp1pgdmw41u3i6r98.mysql.rds.aliyuncs.com:3306/fishbook?connectionTimeZone=UTC&useSSL=false&allowPublicKeyRetrieval=true&sessionVariables=explicit_defaults_for_timestamp=ON"
 ' "$rendered" >/dev/null; then
-  printf 'FAIL: caching_sha2_rsa_exchange\n' >&2
+  printf 'FAIL: private_rds_connection_settings\n' >&2
   exit 1
 fi
 
