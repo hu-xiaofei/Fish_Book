@@ -27,4 +27,18 @@ if ! jq -e '
   exit 1
 fi
 
+if ! jq -e '
+  .services.backend.environment as $environment
+  | $environment.FISHBOOK_ADMIN_BOOTSTRAP_ENABLED == "true"
+    and $environment.FISHBOOK_ADMIN_BOOTSTRAP_EMAIL == "admin@example.invalid"
+    and $environment.FISHBOOK_ADMIN_BOOTSTRAP_PASSWORD == "synthetic-admin-password"
+    and $environment.FISHBOOK_ADMIN_BOOTSTRAP_NICKNAME == "Synthetic Admin"
+    and ($environment | has("FISHBOOK_ADMIN_EMAIL") | not)
+    and ($environment | has("FISHBOOK_ADMIN_PASSWORD") | not)
+    and ($environment | has("FISHBOOK_ADMIN_NICKNAME") | not)
+' "$rendered" >/dev/null; then
+  printf 'FAIL: admin_bootstrap_environment_mapping\n' >&2
+  exit 1
+fi
+
 bash "$root/deploy/private-ecs/verify-compose.sh" "$env_file"
