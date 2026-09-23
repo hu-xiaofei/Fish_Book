@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @ConditionalOnProperty(name = "fishbook.media.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "fishbook.media.provider", havingValue = "minio", matchIfMissing = true)
 public class MinioBucketInitializer implements ApplicationRunner {
     private final MinioClient minioClient;
     private final MediaProperties properties;

@@ -179,6 +179,26 @@ class MediaConfigurationTest {
     }
 
     @Test
+    void componentScanWithFilesystemDoesNotCreateMinioInitializer(@TempDir Path root) {
+        new ApplicationContextRunner()
+                .withInitializer(context -> new ClassPathBeanDefinitionScanner(
+                        (BeanDefinitionRegistry) context.getBeanFactory(), true, context.getEnvironment())
+                        .scan("com.fishbook.media.config"))
+                .withPropertyValues(
+                        "fishbook.media.enabled=true",
+                        "fishbook.media.provider=filesystem",
+                        "fishbook.media.filesystem.root=" + root)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(MediaStore.class);
+                    assertThat(context.getBean(MediaStore.class))
+                            .isInstanceOf(FilesystemMediaStore.class);
+                    assertThat(context).doesNotHaveBean(MinioClient.class);
+                    assertThat(context).doesNotHaveBean(MinioBucketInitializer.class);
+                });
+    }
+
+    @Test
     void enabledFilesystemFailsWhenRootDoesNotExist(@TempDir Path tempDir) {
         contextRunner
                 .withPropertyValues(
